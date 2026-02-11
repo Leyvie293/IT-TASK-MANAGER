@@ -1,0 +1,215 @@
+<!-- templates/system/email_settings.html -->
+{% extends "base.html" %}
+
+{% block title %}Email Settings - {{ app_name }}{% endblock %}
+
+{% block page_title %}Email Settings{% endblock %}
+
+{% block page_description %}Configure email server and notifications{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group">
+    <a href="{{ url_for('system_settings') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back to Settings
+    </a>
+    <button type="button" class="btn btn-outline-primary" onclick="testEmail()">
+        <i class="bi bi-envelope-check me-1"></i> Test Email
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <form method="POST" action="{{ url_for('system_settings_email') }}">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-server me-2"></i>SMTP Server Configuration
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Configure your SMTP server settings to enable email notifications.
+                        </div>
+                        
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="mail_server" class="form-label">SMTP Server</label>
+                                <input type="text" class="form-control" id="mail_server" name="mail_server" 
+                                       value="{{ mail_server }}" placeholder="e.g., smtp.gmail.com" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="mail_port" class="form-label">SMTP Port</label>
+                                <input type="number" class="form-control" id="mail_port" name="mail_port" 
+                                       value="{{ mail_port }}" placeholder="e.g., 587" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="mail_username" class="form-label">Username</label>
+                                <input type="text" class="form-control" id="mail_username" name="mail_username" 
+                                       value="{{ mail_username }}" placeholder="Email address or username" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="mail_password" class="form-label">Password</label>
+                                <input type="password" class="form-control" id="mail_password" name="mail_password" 
+                                       value="{{ mail_password }}" placeholder="SMTP password">
+                                <div class="form-text">Leave blank to keep current password</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="mail_default_sender" class="form-label">Default Sender</label>
+                                <input type="email" class="form-control" id="mail_default_sender" name="mail_default_sender" 
+                                       value="{{ mail_default_sender }}" placeholder="no-reply@example.com" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Security</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="mail_use_tls" id="use_tls" 
+                                           value="on" {% if mail_use_tls %}checked{% endif %}>
+                                    <label class="form-check-label" for="use_tls">
+                                        Use TLS (Recommended)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="mail_use_tls" id="use_ssl" 
+                                           value="off" {% if not mail_use_tls %}checked{% endif %}>
+                                    <label class="form-check-label" for="use_ssl">
+                                        Use SSL
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-envelope-plus me-2"></i>Email Templates
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="task_assigned_subject" class="form-label">Task Assigned Subject</label>
+                                <input type="text" class="form-control" id="task_assigned_subject" 
+                                       name="task_assigned_subject" value="Task Assigned: {{ task_title }}">
+                                <div class="form-text">Available variables: {{ task_title }}, {{ assignee_name }}, {{ department }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="task_completed_subject" class="form-label">Task Completed Subject</label>
+                                <input type="text" class="form-control" id="task_completed_subject" 
+                                       name="task_completed_subject" value="Task Completed: {{ task_title }}">
+                            </div>
+                            <div class="col-12">
+                                <label for="email_footer" class="form-label">Email Footer</label>
+                                <textarea class="form-control" id="email_footer" name="email_footer" rows="3">
+Best regards,
+{{ company_name }} Team
+
+This is an automated message, please do not reply to this email.
+                                </textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-bell me-2"></i>Notification Settings
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" 
+                                           id="send_welcome_email" name="send_welcome_email" checked>
+                                    <label class="form-check-label" for="send_welcome_email">
+                                        Send welcome email to new users
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" 
+                                           id="send_daily_summary" name="send_daily_summary" checked>
+                                    <label class="form-check-label" for="send_daily_summary">
+                                        Send daily summary email
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" 
+                                           id="send_overdue_alerts" name="send_overdue_alerts" checked>
+                                    <label class="form-check-label" for="send_overdue_alerts">
+                                        Send overdue task alerts
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" 
+                                           id="send_sla_warnings" name="send_sla_warnings" checked>
+                                    <label class="form-check-label" for="send_sla_warnings">
+                                        Send SLA warning emails
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="daily_summary_time" class="form-label">Daily Summary Time</label>
+                                <input type="time" class="form-control" id="daily_summary_time" 
+                                       name="daily_summary_time" value="08:00">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <button type="reset" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-clockwise me-1"></i> Reset
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle me-1"></i> Save Email Settings
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function testEmail() {
+        const email = prompt('Enter email address to send test email:');
+        if (email && email.includes('@')) {
+            fetch('/api/test-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email: email })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Test email sent successfully!');
+                } else {
+                    alert('Failed to send test email: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Error sending test email: ' + error.message);
+            });
+        }
+    }
+</script>
+{% endblock %}

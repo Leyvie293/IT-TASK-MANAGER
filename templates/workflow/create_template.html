@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+
+{% block title %}Create Workflow Template - {{ app_name }}{% endblock %}
+
+{% block page_title %}Create Workflow Template{% endblock %}
+
+{% block page_description %}Define a reusable workflow template with sequential steps{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-diagram-3 me-2"></i>Template Details
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="templateForm">
+                        <!-- Basic Information -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="name" class="form-label">
+                                        Template Name <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="text" class="form-control {% if errors and errors.name %}is-invalid{% endif %}" 
+                                           id="name" name="name" value="{{ form_data.name if form_data else '' }}" 
+                                           required placeholder="e.g., Standard IT Support Workflow">
+                                    {% if errors and errors.name %}
+                                    <div class="invalid-feedback">{{ errors.name }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="category" class="form-label">Category</label>
+                                    <input type="text" class="form-control" id="category" name="category" 
+                                           value="{{ form_data.category if form_data else 'General' }}" 
+                                           placeholder="e.g., IT Support, Maintenance">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Description -->
+                        <div class="mb-4">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" 
+                                      rows="3" placeholder="Describe the purpose of this workflow template...">
+                                {{ form_data.description if form_data else '' }}
+                            </textarea>
+                        </div>
+                        
+                        <!-- Status -->
+                        <div class="mb-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                                       {% if not form_data or form_data.is_active %}checked{% endif %}>
+                                <label class="form-check-label" for="is_active">
+                                    Template is active and available for use
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Workflow Steps -->
+                        <h5 class="mb-3">
+                            <i class="bi bi-list-ol me-2"></i>Workflow Steps
+                            <small class="text-muted ms-2">Define the sequential steps for this workflow</small>
+                        </h5>
+                        
+                        <div id="stepsContainer">
+                            <!-- Steps will be added here dynamically -->
+                            <div class="step-item card mb-3">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">Step 1</h6>
+                                    <button type="button" class="btn btn-sm btn-danger remove-step" disabled>
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label class="form-label">Step Name</label>
+                                                <input type="text" class="form-control step-name" name="step_name[]" 
+                                                       placeholder="e.g., Initial Assessment" required>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label class="form-label">Due Days</label>
+                                                <input type="number" class="form-control step-due-days" name="step_due_days[]" 
+                                                       value="1" min="1" placeholder="Days">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="mb-3">
+                                                <label class="form-label">Assignment</label>
+                                                <select class="form-select step-assignment" name="step_assignment[]">
+                                                    <option value="auto">Auto-assign</option>
+                                                    <option value="task_creator">Task Creator</option>
+                                                    <option value="supervisor">Supervisor</option>
+                                                    <option value="specific_user">Specific User</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Step Description</label>
+                                        <textarea class="form-control step-description" name="step_description[]" 
+                                                  rows="2" placeholder="Describe what needs to be done in this step..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Add Step Button -->
+                        <div class="mb-4">
+                            <button type="button" id="addStep" class="btn btn-outline-primary">
+                                <i class="bi bi-plus-circle me-2"></i> Add Another Step
+                            </button>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Form Actions -->
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('workflow_templates') }}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left me-2"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle me-2"></i> Create Template
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <!-- Information Card -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-info-circle me-2"></i>About Workflow Templates
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p>Workflow templates help standardize and automate your task management process.</p>
+                    
+                    <h6 class="mt-3">Benefits:</h6>
+                    <ul class="list-unstyled">
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <strong>Consistency:</strong> Standardized processes
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <strong>Efficiency:</strong> Reduced setup time for new tasks
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <strong>Quality:</strong> Ensures all necessary steps are followed
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            <strong>Training:</strong> Easy onboarding for new team members
+                        </li>
+                    </ul>
+                    
+                    <h6 class="mt-3">Best Practices:</h6>
+                    <ul class="list-unstyled">
+                        <li class="mb-2">
+                            <i class="bi bi-lightbulb text-warning me-2"></i>
+                            Keep steps clear and actionable
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-lightbulb text-warning me-2"></i>
+                            Estimate realistic timeframes
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-lightbulb text-warning me-2"></i>
+                            Test workflows before making them active
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- Preview Card -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-eye me-2"></i>Template Preview
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="templatePreview">
+                        <p class="text-muted mb-3">Preview will appear here as you fill the form.</p>
+                        <div class="alert alert-info">
+                            <small>
+                                <i class="bi bi-info-circle me-2"></i>
+                                Fill in the form details to see a preview of your template.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        let stepCount = 1;
+        
+        // Add new step
+        document.getElementById('addStep').addEventListener('click', function() {
+            stepCount++;
+            const stepHtml = `
+                <div class="step-item card mb-3">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">Step ${stepCount}</h6>
+                        <button type="button" class="btn btn-sm btn-danger remove-step">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Step Name</label>
+                                    <input type="text" class="form-control step-name" name="step_name[]" 
+                                           placeholder="e.g., Troubleshooting" required>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Due Days</label>
+                                    <input type="number" class="form-control step-due-days" name="step_due_days[]" 
+                                           value="1" min="1" placeholder="Days">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="mb-3">
+                                    <label class="form-label">Assignment</label>
+                                    <select class="form-select step-assignment" name="step_assignment[]">
+                                        <option value="auto">Auto-assign</option>
+                                        <option value="task_creator">Task Creator</option>
+                                        <option value="supervisor">Supervisor</option>
+                                        <option value="specific_user">Specific User</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Step Description</label>
+                            <textarea class="form-control step-description" name="step_description[]" 
+                                      rows="2" placeholder="Describe what needs to be done in this step..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('stepsContainer').insertAdjacentHTML('beforeend', stepHtml);
+            updateRemoveButtons();
+        });
+        
+        // Remove step
+        function updateRemoveButtons() {
+            document.querySelectorAll('.remove-step').forEach(function(button, index) {
+                button.disabled = (index === 0); // Don't allow removing first step
+                button.addEventListener('click', function() {
+                    if (confirm('Are you sure you want to remove this step?')) {
+                        this.closest('.step-item').remove();
+                        renumberSteps();
+                    }
+                });
+            });
+        }
+        
+        // Renumber steps after removal
+        function renumberSteps() {
+            document.querySelectorAll('.step-item').forEach(function(item, index) {
+                const header = item.querySelector('.card-header h6');
+                header.textContent = `Step ${index + 1}`;
+            });
+            stepCount = document.querySelectorAll('.step-item').length;
+            updateRemoveButtons();
+        }
+        
+        // Form validation
+        document.getElementById('templateForm').addEventListener('submit', function(e) {
+            // Check if at least one step has a name
+            const stepNames = document.querySelectorAll('.step-name');
+            let hasValidSteps = false;
+            
+            stepNames.forEach(function(input) {
+                if (input.value.trim()) {
+                    hasValidSteps = true;
+                }
+            });
+            
+            if (!hasValidSteps) {
+                e.preventDefault();
+                alert('Please provide at least one step with a name.');
+                return false;
+            }
+            
+            // Validate main template name
+            const templateName = document.getElementById('name').value.trim();
+            if (!templateName) {
+                e.preventDefault();
+                alert('Template name is required.');
+                return false;
+            }
+            
+            return true;
+        });
+        
+        // Live preview update
+        function updatePreview() {
+            const name = document.getElementById('name').value || 'Template Name';
+            const category = document.getElementById('category').value || 'General';
+            const description = document.getElementById('description').value || 'No description provided.';
+            const isActive = document.getElementById('is_active').checked;
+            
+            let stepsHtml = '';
+            document.querySelectorAll('.step-item').forEach(function(item, index) {
+                const stepName = item.querySelector('.step-name').value || 'Unnamed Step';
+                const stepDesc = item.querySelector('.step-description').value || 'No description';
+                const stepDueDays = item.querySelector('.step-due-days').value || '1';
+                
+                stepsHtml += `
+                    <div class="border-start border-3 border-primary ps-3 mb-2">
+                        <strong>Step ${index + 1}:</strong> ${stepName}
+                        <br>
+                        <small class="text-muted">${stepDesc}</small>
+                        <br>
+                        <small><i class="bi bi-calendar me-1"></i> Due in ${stepDueDays} day(s)</small>
+                    </div>
+                `;
+            });
+            
+            const previewHtml = `
+                <h6 class="border-bottom pb-2 mb-3">${name}</h6>
+                <div class="mb-3">
+                    <span class="badge ${isActive ? 'bg-success' : 'bg-secondary'}">
+                        ${isActive ? 'Active' : 'Inactive'}
+                    </span>
+                    <span class="badge bg-info ms-2">${category}</span>
+                </div>
+                <div class="mb-3">
+                    <strong>Description:</strong>
+                    <p class="text-muted small">${description}</p>
+                </div>
+                <div class="mb-3">
+                    <strong>Workflow Steps (${stepCount}):</strong>
+                    ${stepsHtml || '<p class="text-muted small">No steps defined</p>'}
+                </div>
+            `;
+            
+            document.getElementById('templatePreview').innerHTML = previewHtml;
+        }
+        
+        // Update preview on input
+        ['name', 'category', 'description'].forEach(function(id) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener('input', updatePreview);
+                element.addEventListener('change', updatePreview);
+            }
+        });
+        
+        document.getElementById('is_active').addEventListener('change', updatePreview);
+        
+        // Update preview for step changes
+        document.addEventListener('input', function(e) {
+            if (e.target.classList.contains('step-name') || 
+                e.target.classList.contains('step-description') ||
+                e.target.classList.contains('step-due-days')) {
+                updatePreview();
+            }
+        });
+        
+        // Initialize
+        updateRemoveButtons();
+        updatePreview();
+    });
+</script>
+{% endblock %}

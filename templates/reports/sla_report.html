@@ -1,0 +1,517 @@
+<!-- templates/reports/sla_report.html -->
+{% extends "base.html" %}
+
+{% block title %}SLA Compliance Report - {{ super() }}{% endblock %}
+
+{% block page_title %}<i class="bi bi-clock-history me-2"></i>SLA Compliance Report{% endblock %}
+
+{% block page_description %}Service Level Agreement compliance and performance metrics{% endblock %}
+
+{% block page_actions %}
+    <div class="btn-group">
+        <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-download me-1"></i> Export
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{{ url_for('export_report', report_type='sla', format='csv', date_range=date_range, department=department, sla_status=sla_status) }}">
+                <i class="bi bi-file-earmark-spreadsheet me-2"></i> CSV Format
+            </a></li>
+            <li><a class="dropdown-item" href="{{ url_for('export_report', report_type='sla', format='json', date_range=date_range, department=department, sla_status=sla_status) }}">
+                <i class="bi bi-code-slash me-2"></i> JSON Format
+            </a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('reports_dashboard') }}">
+                <i class="bi bi-arrow-left me-2"></i> Back to Reports
+            </a></li>
+        </ul>
+    </div>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <!-- Date Range Filter -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark">
+                <h6 class="mb-0"><i class="bi bi-calendar-range me-2"></i>Filter Options</h6>
+            </div>
+            <div class="card-body">
+                <form method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Date Range</label>
+                        <select name="date_range" class="form-select">
+                            <option value="7days" {% if date_range == '7days' %}selected{% endif %}>Last 7 Days</option>
+                            <option value="30days" {% if date_range == '30days' %}selected{% endif %}>Last 30 Days</option>
+                            <option value="90days" {% if date_range == '90days' %}selected{% endif %}>Last 90 Days</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Department</label>
+                        <select name="department" class="form-select">
+                            <option value="all" {% if department == 'all' %}selected{% endif %}>All Departments</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept }}" {% if department == dept %}selected{% endif %}>{{ dept }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label">SLA Status</label>
+                        <select name="sla_status" class="form-select">
+                            <option value="all" {% if sla_status == 'all' %}selected{% endif %}>All</option>
+                            <option value="met" {% if sla_status == 'met' %}selected{% endif %}>SLA Met</option>
+                            <option value="missed" {% if sla_status == 'missed' %}selected{% endif %}>SLA Missed</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-filter me-1"></i> Apply Filters
+                        </button>
+                    </div>
+                    
+                    <div class="col-md-2 d-flex align-items-end">
+                        <a href="{{ url_for('report_sla_details') }}" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-x-circle me-1"></i> Clear Filters
+                        </a>
+                    </div>
+                </form>
+                {% if start_date and end_date %}
+                <div class="mt-2 text-muted small">
+                    <i class="bi bi-calendar me-1"></i>
+                    Date range: {{ start_date }} to {{ end_date }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Overall Statistics -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <div class="mb-2">
+                            <i class="bi bi-list-task display-6 text-primary"></i>
+                        </div>
+                        <h3 class="mb-1">{{ total_sla_tasks }}</h3>
+                        <p class="text-muted mb-0">Total SLA Tasks</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <div class="mb-2">
+                            <i class="bi bi-check-circle display-6 text-success"></i>
+                        </div>
+                        <h3 class="mb-1">{{ met_sla }}</h3>
+                        <p class="text-muted mb-0">SLA Met</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <div class="mb-2">
+                            <i class="bi bi-exclamation-triangle display-6 text-danger"></i>
+                        </div>
+                        <h3 class="mb-1">{{ missed_sla }}</h3>
+                        <p class="text-muted mb-0">SLA Missed</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <div class="mb-2">
+                            <i class="bi bi-percent display-6 text-info"></i>
+                        </div>
+                        <h3 class="mb-1">{{ overall_compliance }}%</h3>
+                        <p class="text-muted mb-0">Compliance Rate</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Department Breakdown -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-building me-2"></i>Department Breakdown</h6>
+                <span class="badge bg-primary">{{ dept_breakdown|length }} Departments</span>
+            </div>
+            <div class="card-body">
+                {% if dept_breakdown %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Department</th>
+                                <th>Total Tasks</th>
+                                <th>SLA Met</th>
+                                <th>SLA Missed</th>
+                                <th>Compliance Rate</th>
+                                <th>Performance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for dept in dept_breakdown %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="me-3">
+                                            <i class="bi bi-building fs-4"></i>
+                                        </div>
+                                        <div>
+                                            <strong>{{ dept.department }}</strong>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-dark">{{ dept.total_tasks }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-success">{{ dept.met_sla }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-danger">{{ dept.missed_sla }}</span>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                                            <div class="progress-bar {% if dept.compliance_rate >= 90 %}bg-success{% elif dept.compliance_rate >= 75 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                                 style="width: {{ dept.compliance_rate }}%"></div>
+                                        </div>
+                                        <span class="fw-medium">{{ dept.compliance_rate }}%</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if dept.compliance_rate >= 90 %}
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-check-circle me-1"></i> Excellent
+                                    </span>
+                                    {% elif dept.compliance_rate >= 75 %}
+                                    <span class="badge bg-warning">
+                                        <i class="bi bi-exclamation-circle me-1"></i> Good
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-danger">
+                                        <i class="bi bi-x-circle me-1"></i> Needs Improvement
+                                    </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <div class="mb-3">
+                        <i class="bi bi-clipboard-data display-1 text-muted"></i>
+                    </div>
+                    <h5 class="text-muted">No SLA data available</h5>
+                    <p class="text-muted">No tasks with SLA information found for the selected filters.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Task Details -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-list-task me-2"></i>SLA Task Details ({{ tasks_analyzed|length }})</h6>
+                <div>
+                    <span class="badge bg-info me-2">Date Range: {{ date_range }}</span>
+                    {% if department != 'all' %}
+                    <span class="badge bg-dark">{{ department }}</span>
+                    {% endif %}
+                    {% if start_date and end_date %}
+                    <span class="badge bg-secondary">{{ start_date }} to {{ end_date }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if tasks_analyzed %}
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Task ID</th>
+                                <th>Title</th>
+                                <th>Department</th>
+                                <th>Priority</th>
+                                <th>SLA Status</th>
+                                <th>Hours Difference</th>
+                                <th>Status</th>
+                                <th>Assigned To</th>
+                                <th>SLA Due Date</th>
+                                <th>Completed At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for task_data in tasks_analyzed %}
+                            {% set task = task_data.task %}
+                            <tr>
+                                <td>
+                                    <span class="fw-bold">{{ task.task_id }}</span>
+                                </td>
+                                <td>
+                                    <div class="fw-medium">{{ task.title|truncate(40) }}</div>
+                                    {% if task.description %}
+                                    <small class="text-muted">{{ task.description|truncate(80) }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-dark">{{ task.department or 'N/A' }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge 
+                                        {% if task.priority == 'Critical' %}bg-danger
+                                        {% elif task.priority == 'High' %}bg-warning
+                                        {% elif task.priority == 'Medium' %}bg-info
+                                        {% elif task.priority == 'Low' %}bg-success
+                                        {% else %}bg-secondary{% endif %}">
+                                        {{ task.priority }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if task_data.sla_met %}
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-check-circle me-1"></i> Met
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-danger">
+                                        <i class="bi bi-x-circle me-1"></i> Missed
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="fw-medium {% if task_data.hours_difference > 0 %}text-danger{% else %}text-success{% endif %}">
+                                        {{ "%.2f"|format(task_data.hours_difference) }} hrs
+                                    </span>
+                                    {% if task_data.hours_difference > 0 %}
+                                    <small class="text-danger d-block">Overdue</small>
+                                    {% else %}
+                                    <small class="text-success d-block">Early</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge 
+                                        {% if task.status == 'Resolved' %}bg-success
+                                        {% elif task.status == 'In Progress' %}bg-info
+                                        {% elif task.status in ['New', 'Assigned'] %}bg-warning
+                                        {% else %}bg-secondary{% endif %}">
+                                        {{ task.status }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if task.assigned_to_user %}
+                                    <div class="d-flex align-items-center">
+                                        <div class="me-2">
+                                            <i class="bi bi-person-circle"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-medium">
+                                                {{ task.assigned_to_user.full_name if task.assigned_to_user.full_name else task.assigned_to_user.first_name ~ ' ' ~ task.assigned_to_user.last_name }}
+                                            </div>
+                                            <small class="text-muted">
+                                                {{ task.assigned_to_user.role }}
+                                                {% if task.assigned_to_user.department %}
+                                                • {{ task.assigned_to_user.department }}
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Unassigned</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if task.sla_due_date %}
+                                    <span class="fw-medium">{{ task.sla_due_date|format_date }}</span>
+                                    <br>
+                                    <small class="text-muted">{{ task.sla_due_date|format_datetime('%H:%M') }}</small>
+                                    {% else %}
+                                    <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if task.completed_at %}
+                                    <span class="fw-medium">{{ task.completed_at|format_date }}</span>
+                                    <br>
+                                    <small class="text-muted">{{ task.completed_at|format_datetime('%H:%M') }}</small>
+                                    {% else %}
+                                    <span class="text-muted">Not completed</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Performance Insights -->
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body">
+                                <h6 class="card-title mb-3">
+                                    <i class="bi bi-lightbulb me-2"></i>Performance Insights
+                                </h6>
+                                {% if overall_compliance >= 90 %}
+                                <div class="alert alert-success">
+                                    <i class="bi bi-check-circle-fill me-2"></i>
+                                    <strong>Excellent Performance:</strong> SLA compliance rate is at {{ overall_compliance }}%, exceeding the target.
+                                </div>
+                                {% elif overall_compliance >= 75 %}
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                    <strong>Good Performance:</strong> SLA compliance rate is at {{ overall_compliance }}%, meeting minimum standards.
+                                </div>
+                                {% else %}
+                                <div class="alert alert-danger">
+                                    <i class="bi bi-exclamation-octagon-fill me-2"></i>
+                                    <strong>Needs Improvement:</strong> SLA compliance rate is below target at {{ overall_compliance }}%.
+                                </div>
+                                {% endif %}
+                                
+                                <ul class="list-unstyled">
+                                    <li class="mb-2">
+                                        <i class="bi bi-arrow-up-circle text-success me-2"></i>
+                                        Best performing department: 
+                                        {% if dept_breakdown|length > 0 %}
+                                        {{ dept_breakdown[0].department }} ({{ dept_breakdown[0].compliance_rate }}%)
+                                        {% else %}
+                                        N/A
+                                        {% endif %}
+                                    </li>
+                                    <li class="mb-2">
+                                        <i class="bi bi-arrow-down-circle text-danger me-2"></i>
+                                        {% if dept_breakdown|length > 1 %}
+                                        Needs attention: {{ dept_breakdown[-1].department }} ({{ dept_breakdown[-1].compliance_rate }}%)
+                                        {% else %}
+                                        All departments performing similarly
+                                        {% endif %}
+                                    </li>
+                                    <li>
+                                        <i class="bi bi-clock text-info me-2"></i>
+                                        Average time difference: {{ "%.2f"|format(avg_time_diff) }} hours
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body">
+                                <h6 class="card-title mb-3">
+                                    <i class="bi bi-bar-chart me-2"></i>SLA Distribution
+                                </h6>
+                                <div class="text-center">
+                                    <div class="display-4 fw-bold {% if overall_compliance >= 90 %}text-success{% elif overall_compliance >= 75 %}text-warning{% else %}text-danger{% endif %}">
+                                        {{ overall_compliance }}%
+                                    </div>
+                                    <p class="text-muted">Overall Compliance Rate</p>
+                                    
+                                    <div class="row mt-3">
+                                        <div class="col-6">
+                                            <div class="border rounded p-2">
+                                                <div class="h4 text-success">{{ met_sla }}</div>
+                                                <small class="text-muted">SLA Met</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="border rounded p-2">
+                                                <div class="h4 text-danger">{{ missed_sla }}</div>
+                                                <small class="text-muted">SLA Missed</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="card-body text-center py-5">
+                <div class="mb-3">
+                    <i class="bi bi-clipboard-data display-1 text-muted"></i>
+                </div>
+                <h5 class="text-muted">No SLA tasks found</h5>
+                <p class="text-muted mb-4">
+                    {% if department != 'all' or date_range != '30days' %}
+                    Try adjusting your filters or check if tasks have SLA due dates set.
+                    {% else %}
+                    No tasks with SLA information found for the selected period.
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
+            
+            <!-- Report Footer -->
+            <div class="card-footer bg-dark">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Report generated: {{ now|format_datetime }}
+                            {% if department != 'all' %}
+                            • Filtered by: {{ department }}
+                            {% endif %}
+                        </small>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <small class="text-muted">
+                            Showing {{ tasks_analyzed|length }} of {{ total_sla_tasks }} tasks
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Update date range selection for custom dates
+        const dateRangeSelect = document.querySelector('select[name="date_range"]');
+        if (dateRangeSelect) {
+            dateRangeSelect.addEventListener('change', function() {
+                if (this.value === 'custom') {
+                    // You could show custom date inputs here
+                    alert('Custom date range selection would be implemented here');
+                    this.value = '30days'; // Reset for now
+                }
+            });
+        }
+        
+        // Export button handlers
+        const exportLinks = document.querySelectorAll('a[href*="export_report"]');
+        exportLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                // Add current filters to export URL
+                const url = new URL(this.href);
+                const params = new URLSearchParams(window.location.search);
+                
+                // Add current filter parameters
+                ['date_range', 'department', 'sla_status'].forEach(param => {
+                    if (params.get(param)) {
+                        url.searchParams.set(param, params.get(param));
+                    }
+                });
+                
+                this.href = url.toString();
+            });
+        });
+    });
+</script>
+{% endblock %}

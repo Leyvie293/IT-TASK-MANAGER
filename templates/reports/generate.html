@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Custom Report{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title mb-0">Generate Custom Report</h3>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="report_type" class="form-label">Report Type *</label>
+                            <select class="form-select" id="report_type" name="report_type" required>
+                                <option value="">Select a report type...</option>
+                                <option value="sla">SLA Compliance Report</option>
+                                <option value="performance">Performance Report</option>
+                                <option value="summary">Task Summary Report</option>
+                                <option value="analytics">Analytics Report</option>
+                            </select>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="start_date" class="form-label">Start Date</label>
+                                    <input type="date" class="form-control" id="start_date" name="start_date">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="end_date" class="form-label">End Date</label>
+                                    <input type="date" class="form-control" id="end_date" name="end_date">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="format" class="form-label">Output Format</label>
+                            <select class="form-select" id="format" name="format">
+                                <option value="html" selected>HTML (Web View)</option>
+                                <option value="csv">CSV (Excel)</option>
+                                <option value="pdf">PDF (Download)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <a href="{{ url_for('report.dashboard') }}" class="btn btn-secondary me-md-2">Cancel</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-gear"></i> Generate Report
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default dates (last 30 days) using JavaScript Date object
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+    // Format dates as YYYY-MM-DD
+    function formatDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    
+    // Set the date inputs
+    document.getElementById('end_date').value = formatDate(today);
+    document.getElementById('start_date').value = formatDate(thirtyDaysAgo);
+});
+</script>
+{% endblock %}

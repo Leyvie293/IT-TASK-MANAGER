@@ -1,0 +1,739 @@
+{% extends "base.html" %}
+
+{% block title %}Workflow Templates - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2">
+            <i class="fas fa-project-diagram me-2"></i>Workflow Templates
+        </h1>
+        <div class="btn-toolbar">
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTemplateModal">
+                <i class="fas fa-plus-circle me-1"></i> New Template
+            </button>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">Total Templates</h6>
+                            <h3 class="mb-0">{{ templates|length }}</h3>
+                        </div>
+                        <i class="fas fa-layer-group fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">Active</h6>
+                            <h3 class="mb-0">
+                                {% set active_count = 0 %}
+                                {% for template in templates %}
+                                    {% if template.is_active %}
+                                        {% set active_count = active_count + 1 %}
+                                    {% endif %}
+                                {% endfor %}
+                                {{ active_count }}
+                            </h3>
+                        </div>
+                        <i class="fas fa-play-circle fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">Categories</h6>
+                            <h3 class="mb-0">
+                                {% set categories = [] %}
+                                {% for template in templates %}
+                                    {% if template.category and template.category not in categories %}
+                                        {% set categories = categories.append(template.category) %}
+                                    {% endif %}
+                                {% endfor %}
+                                {{ categories|length }}
+                            </h3>
+                        </div>
+                        <i class="fas fa-tags fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-1">Steps (Avg)</h6>
+                            <h3 class="mb-0">
+                                {% set total_steps = 0 %}
+                                {% for template in templates %}
+                                    {% set steps = get_template_steps(template.id) %}
+                                    {% set total_steps = total_steps + steps|length %}
+                                {% endfor %}
+                                {% if templates|length > 0 %}
+                                    {{ (total_steps / templates|length)|round(1) }}
+                                {% else %}
+                                    0
+                                {% endif %}
+                            </h3>
+                        </div>
+                        <i class="fas fa-steps fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template Categories -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Filter by Category</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex flex-wrap gap-2" id="categoryFilter">
+                        <button class="btn btn-sm btn-primary active" onclick="filterTemplates('all')">
+                            All Templates
+                        </button>
+                        {% set unique_categories = [] %}
+                        {% for template in templates %}
+                            {% if template.category and template.category not in unique_categories %}
+                                {% set unique_categories = unique_categories.append(template.category) %}
+                            {% endif %}
+                        {% endfor %}
+                        {% for category in unique_categories %}
+                        <button class="btn btn-sm btn-outline-primary" onclick="filterTemplates('{{ category }}')">
+                            {{ category }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Templates Grid -->
+    <div class="row" id="templatesGrid">
+        {% for template in templates %}
+        <div class="col-lg-4 col-md-6 mb-4" data-category="{{ template.category }}">
+            <div class="card h-100 workflow-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">{{ template.name }}</h5>
+                    <span class="badge bg-{{ 'success' if template.is_active else 'secondary' }}">
+                        {{ 'Active' if template.is_active else 'Inactive' }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <p class="card-text text-muted">{{ template.description or 'No description provided' }}</p>
+                    
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1">Category:</small>
+                        <span class="badge bg-info">{{ template.category or 'General' }}</span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1">Steps ({{ get_template_steps(template.id)|length }}):</small>
+                        <div class="steps-preview">
+                            {% set steps = get_template_steps(template.id) %}
+                            {% for step in steps[:3] %}
+                            <div class="step-item">
+                                <i class="fas fa-check-circle text-success me-1"></i>
+                                {{ step.name }}
+                                {% if step.estimated_hours %}
+                                <small class="text-muted">({{ step.estimated_hours }}h)</small>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            {% if steps|length > 3 %}
+                            <div class="step-item text-muted">
+                                <i class="fas fa-ellipsis-h me-1"></i>
+                                + {{ steps|length - 3 }} more steps
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-6">
+                            <small class="text-muted d-block">Default Priority:</small>
+                            <span class="badge bg-{% if template.default_priority == 'Critical' %}danger
+                            {% elif template.default_priority == 'High' %}warning
+                            {% elif template.default_priority == 'Medium' %}info
+                            {% else %}secondary{% endif %}">
+                                {{ template.default_priority }}
+                            </span>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">Est. Hours:</small>
+                            <strong>{{ template.estimated_hours }}</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <div class="btn-group w-100" role="group">
+                        <a href="{{ url_for('view_workflow_template', template_id=template.id) }}" 
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-eye"></i> View
+                        </a>
+                        <a href="{{ url_for('edit_workflow_template', template_id=template.id) }}"
+                           class="btn btn-sm btn-outline-warning">
+                            <i class="fas fa-edit"></i> Edit
+                        </a>
+                        <button class="btn btn-sm btn-outline-success apply-template-btn"
+                                data-template-id="{{ template.id }}"
+                                data-template-name="{{ template.name }}">
+                            <i class="fas fa-check"></i> Apply
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger delete-template-btn"
+                                data-template-id="{{ template.id }}"
+                                data-template-name="{{ template.name }}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="fas fa-project-diagram fa-4x text-muted mb-3"></i>
+                <h3 class="mt-3 text-muted">No Workflow Templates</h3>
+                <p class="text-muted">Create your first workflow template to automate task processes</p>
+                <button class="btn btn-primary mt-2" data-bs-toggle="modal" data-bs-target="#createTemplateModal">
+                    <i class="fas fa-plus-circle me-2"></i>Create First Template
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Quick Actions</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="d-grid">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-primary">
+                            <i class="fas fa-tachometer-alt me-2"></i> Dashboard
+                        </a>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-outline-success" id="exportTemplatesBtn">
+                            <i class="fas fa-download me-2"></i> Export Templates
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-grid">
+                        <button type="button" class="btn btn-outline-warning" id="importTemplatesBtn">
+                            <i class="fas fa-upload me-2"></i> Import Templates
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Template Modal -->
+<div class="modal fade" id="createTemplateModal" tabindex="-1" aria-labelledby="createTemplateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createTemplateModalLabel">Create New Workflow Template</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('create_workflow_template') }}" id="templateForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="templateName" class="form-label">Template Name *</label>
+                                <input type="text" class="form-control" id="templateName" name="name" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="templateCategory" class="form-label">Category</label>
+                                <input type="text" class="form-control" id="templateCategory" name="category" 
+                                       placeholder="e.g., IT Support, HR, Maintenance">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="templateDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="templateDescription" name="description" rows="3" 
+                                  placeholder="Describe this workflow template..."></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="defaultPriority" class="form-label">Default Priority</label>
+                                <select class="form-select" id="defaultPriority" name="default_priority">
+                                    <option value="Low">Low</option>
+                                    <option value="Medium" selected>Medium</option>
+                                    <option value="High">High</option>
+                                    <option value="Critical">Critical</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="estimatedHours" class="form-label">Estimated Hours</label>
+                                <input type="number" class="form-control" id="estimatedHours" name="estimated_hours" 
+                                       step="0.5" min="0" value="2" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <h6>Workflow Steps</h6>
+                    <div id="stepsContainer">
+                        <div class="step-card card mb-3" id="step1">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Step 1</span>
+                                <button type="button" class="btn btn-sm btn-danger remove-step" data-step="1">Remove</button>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Step Name *</label>
+                                            <input type="text" class="form-control step-name" name="step_1_name" required 
+                                                   placeholder="e.g., Initial Assessment">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Assigned Role</label>
+                                            <select class="form-select step-role" name="step_1_role">
+                                                <option value="Technician">Technician</option>
+                                                <option value="Supervisor">Supervisor</option>
+                                                <option value="Admin">Admin</option>
+                                                <option value="Any">Any Role</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Description</label>
+                                    <textarea class="form-control step-description" name="step_1_description" rows="2" 
+                                              placeholder="Describe this step..."></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Estimated Hours</label>
+                                    <input type="number" class="form-control step-hours" name="step_1_estimated_hours" 
+                                           step="0.5" min="0" value="0.5">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="button" class="btn btn-outline-primary" id="addStepBtn">
+                        <i class="fas fa-plus me-1"></i> Add Another Step
+                    </button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Apply Template Modal -->
+<div class="modal fade" id="applyTemplateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Apply Workflow Template</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Apply template "<span id="applyTemplateName"></span>" to which task?</p>
+                <div class="mb-3">
+                    <label for="taskSelect" class="form-label">Select Task</label>
+                    <select class="form-select" id="taskSelect">
+                        <option value="">Loading tasks...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmApplyBtn">Apply Template</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Template Modal -->
+<div class="modal fade" id="deleteTemplateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete Workflow Template</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete template "<span id="deleteTemplateName"></span>"?</p>
+                <p class="text-danger"><strong>Warning:</strong> This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteTemplateForm" method="POST" action="" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">Delete Template</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.workflow-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 1px solid #dee2e6;
+}
+
+.workflow-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.steps-preview {
+    max-height: 120px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.step-item {
+    padding: 4px 0;
+    font-size: 0.9rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.step-item:last-child {
+    border-bottom: none;
+}
+
+.step-card {
+    border-left: 4px solid #0d6efd;
+}
+
+.step-card .card-header {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.btn-group .btn {
+    border-radius: 0;
+}
+
+.btn-group .btn:first-child {
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+}
+
+.btn-group .btn:last-child {
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+/* Custom scrollbar for steps preview */
+.steps-preview::-webkit-scrollbar {
+    width: 4px;
+}
+
+.steps-preview::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.steps-preview::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.steps-preview::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let stepCounter = 1;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Bootstrap components
+    const applyTemplateModal = new bootstrap.Modal(document.getElementById('applyTemplateModal'));
+    const deleteTemplateModal = new bootstrap.Modal(document.getElementById('deleteTemplateModal'));
+    
+    // Add step functionality
+    document.getElementById('addStepBtn').addEventListener('click', function() {
+        stepCounter++;
+        const stepsContainer = document.getElementById('stepsContainer');
+        
+        const stepCard = document.createElement('div');
+        stepCard.className = 'step-card card mb-3';
+        stepCard.id = 'step' + stepCounter;
+        
+        stepCard.innerHTML = `
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Step ${stepCounter}</span>
+                <button type="button" class="btn btn-sm btn-danger remove-step" data-step="${stepCounter}">Remove</button>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Step Name *</label>
+                            <input type="text" class="form-control step-name" name="step_${stepCounter}_name" required>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Assigned Role</label>
+                            <select class="form-select step-role" name="step_${stepCounter}_role">
+                                <option value="Technician">Technician</option>
+                                <option value="Supervisor">Supervisor</option>
+                                <option value="Admin">Admin</option>
+                                <option value="Any">Any Role</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control step-description" name="step_${stepCounter}_description" rows="2"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Estimated Hours</label>
+                    <input type="number" class="form-control step-hours" name="step_${stepCounter}_estimated_hours" step="0.5" min="0" value="0.5">
+                </div>
+            </div>
+        `;
+        
+        stepsContainer.appendChild(stepCard);
+    });
+    
+    // Remove step functionality
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('remove-step')) {
+            const step = parseInt(e.target.getAttribute('data-step'));
+            if (document.querySelectorAll('.step-card').length > 1) {
+                const stepCard = document.getElementById('step' + step);
+                if (stepCard) {
+                    stepCard.remove();
+                    // Renumber remaining steps
+                    const stepCards = document.querySelectorAll('.step-card');
+                    stepCounter = stepCards.length;
+                    stepCards.forEach((card, index) => {
+                        const newStepNum = index + 1;
+                        card.id = 'step' + newStepNum;
+                        card.querySelector('.card-header span').textContent = 'Step ' + newStepNum;
+                        
+                        // Update all input names
+                        const inputs = card.querySelectorAll('input, select, textarea');
+                        inputs.forEach(input => {
+                            const name = input.getAttribute('name');
+                            if (name && name.startsWith('step_')) {
+                                const newName = name.replace(/step_\d+_/, 'step_' + newStepNum + '_');
+                                input.setAttribute('name', newName);
+                            }
+                        });
+                    });
+                }
+            } else {
+                alert('At least one step is required');
+            }
+        }
+    });
+    
+    // Apply template buttons
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('apply-template-btn') || e.target.closest('.apply-template-btn')) {
+            const button = e.target.classList.contains('apply-template-btn') ? e.target : e.target.closest('.apply-template-btn');
+            const templateId = button.getAttribute('data-template-id');
+            const templateName = button.getAttribute('data-template-name');
+            
+            document.getElementById('applyTemplateName').textContent = templateName;
+            
+            // Load open tasks
+            fetch('/api/tasks/open')
+                .then(response => response.json())
+                .then(data => {
+                    const taskSelect = document.getElementById('taskSelect');
+                    taskSelect.innerHTML = '<option value="">Select a task...</option>';
+                    
+                    if (data.success && data.tasks && data.tasks.length > 0) {
+                        data.tasks.forEach(task => {
+                            const option = document.createElement('option');
+                            option.value = task.id;
+                            option.textContent = `#${task.id.slice(0, 8)} - ${task.title}`;
+                            taskSelect.appendChild(option);
+                        });
+                    } else {
+                        const option = document.createElement('option');
+                        option.value = '';
+                        option.textContent = 'No open tasks available';
+                        taskSelect.appendChild(option);
+                        taskSelect.disabled = true;
+                        document.getElementById('confirmApplyBtn').disabled = true;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading tasks:', error);
+                    const taskSelect = document.getElementById('taskSelect');
+                    taskSelect.innerHTML = '<option value="">Error loading tasks</option>';
+                    taskSelect.disabled = true;
+                });
+            
+            // Store template ID for later use
+            document.getElementById('confirmApplyBtn').dataset.templateId = templateId;
+            applyTemplateModal.show();
+        }
+    });
+    
+    // Confirm apply template
+    document.getElementById('confirmApplyBtn').addEventListener('click', function() {
+        const templateId = this.dataset.templateId;
+        const taskId = document.getElementById('taskSelect').value;
+        
+        if (!taskId) {
+            alert('Please select a task');
+            return;
+        }
+        
+        fetch('/tasks/apply-workflow-template/' + templateId, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ task_id: taskId })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                applyTemplateModal.hide();
+                alert('Template applied successfully!');
+                // Optionally redirect to the task
+                window.location.href = '/tasks/' + taskId;
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while applying the template');
+        });
+    });
+    
+    // Delete template buttons
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('delete-template-btn') || e.target.closest('.delete-template-btn')) {
+            const button = e.target.classList.contains('delete-template-btn') ? e.target : e.target.closest('.delete-template-btn');
+            const templateId = button.getAttribute('data-template-id');
+            const templateName = button.getAttribute('data-template-name');
+            
+            document.getElementById('deleteTemplateName').textContent = templateName;
+            document.getElementById('deleteTemplateForm').action = '/workflow-templates/' + templateId + '/delete';
+            
+            deleteTemplateModal.show();
+        }
+    });
+    
+    // Export templates
+    document.getElementById('exportTemplatesBtn').addEventListener('click', function() {
+        window.location.href = '/admin/export/workflows';
+    });
+    
+    // Import templates
+    document.getElementById('importTemplatesBtn').addEventListener('click', function() {
+        alert('Template import feature is under development. Please use the admin import interface.');
+    });
+    
+    // Form validation for template creation
+    const templateForm = document.getElementById('templateForm');
+    if (templateForm) {
+        templateForm.addEventListener('submit', function(e) {
+            // Ensure at least one step has a name
+            const stepNames = document.querySelectorAll('.step-name');
+            let hasValidStep = false;
+            stepNames.forEach(input => {
+                if (input.value.trim()) {
+                    hasValidStep = true;
+                }
+            });
+            
+            if (!hasValidStep) {
+                e.preventDefault();
+                alert('Please add at least one step with a name.');
+                return;
+            }
+            
+            // Calculate total estimated hours
+            let totalHours = 0;
+            const stepHoursInputs = document.querySelectorAll('.step-hours');
+            stepHoursInputs.forEach(input => {
+                totalHours += parseFloat(input.value) || 0;
+            });
+            
+            // Update the total estimated hours field
+            document.getElementById('estimatedHours').value = totalHours.toFixed(1);
+        });
+    }
+    
+    // Filter templates by category
+    window.filterTemplates = function(category) {
+        const buttons = document.querySelectorAll('#categoryFilter button');
+        buttons.forEach(btn => btn.classList.remove('active', 'btn-primary'));
+        buttons.forEach(btn => {
+            if (btn.textContent.trim() === 'All Templates' && category === 'all') {
+                btn.classList.add('active', 'btn-primary');
+                btn.classList.remove('btn-outline-primary');
+            } else if (btn.textContent.trim() === category) {
+                btn.classList.add('active', 'btn-primary');
+                btn.classList.remove('btn-outline-primary');
+            } else {
+                btn.classList.remove('active', 'btn-primary');
+                btn.classList.add('btn-outline-primary');
+            }
+        });
+        
+        const templates = document.querySelectorAll('#templatesGrid .col-lg-4');
+        templates.forEach(template => {
+            if (category === 'all' || template.dataset.category === category) {
+                template.style.display = '';
+            } else {
+                template.style.display = 'none';
+            }
+        });
+    };
+});
+</script>
+{% endblock %}

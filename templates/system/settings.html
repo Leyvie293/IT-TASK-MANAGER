@@ -1,0 +1,191 @@
+<!-- templates/system/settings.html -->
+{% extends "base.html" %}
+
+{% block title %}System Settings - {{ app_name }}{% endblock %}
+
+{% block page_title %}System Settings{% endblock %}
+
+{% block page_description %}Configure system preferences and options{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Settings Navigation -->
+        <div class="col-xl-3 col-lg-4 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Settings Menu</h6>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="{{ url_for('system_settings_general') }}" 
+                       class="list-group-item list-group-item-action {% if request.endpoint == 'system_settings_general' %}active{% endif %}">
+                        <i class="bi bi-gear me-2"></i> General Settings
+                    </a>
+                    <a href="{{ url_for('system_settings_email') }}" 
+                       class="list-group-item list-group-item-action {% if request.endpoint == 'system_settings_email' %}active{% endif %}">
+                        <i class="bi bi-envelope me-2"></i> Email Settings
+                    </a>
+                    <a href="{{ url_for('system_settings_backup') }}" 
+                       class="list-group-item list-group-item-action {% if request.endpoint == 'system_settings_backup' %}active{% endif %}">
+                        <i class="bi bi-database me-2"></i> Backup & Restore
+                    </a>
+                    <a href="{{ url_for('manage_users') }}" 
+                       class="list-group-item list-group-item-action">
+                        <i class="bi bi-people me-2"></i> User Management
+                    </a>
+                    <a href="{{ url_for('workflow_templates') }}" 
+                       class="list-group-item list-group-item-action">
+                        <i class="bi bi-diagram-3 me-2"></i> Workflow Templates
+                    </a>
+                    <a href="{{ url_for('reports_dashboard') }}" 
+                       class="list-group-item list-group-item-action">
+                        <i class="bi bi-bar-chart me-2"></i> Reports
+                    </a>
+                </div>
+            </div>
+            
+            <!-- System Information -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="mb-0">System Information</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">Application Version</small>
+                        <div class="fw-bold">{{ config.get('APP_VERSION', '1.0.0') }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Database</small>
+                        <div class="fw-bold">PostgreSQL</div>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Environment</small>
+                        <div class="fw-bold">{{ config.get('ENV', 'Development') }}</div>
+                    </div>
+                    <div>
+                        <small class="text-muted">Last Updated</small>
+                        <div class="fw-bold">{{ now.strftime('%Y-%m-%d %H:%M') }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Content -->
+        <div class="col-xl-9 col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-house-gear me-2"></i>System Configuration
+                    </h5>
+                </div>
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-gear display-1 text-muted mb-4"></i>
+                    <h4 class="text-muted mb-3">System Settings Dashboard</h4>
+                    <p class="text-muted mb-4">
+                        Select a category from the menu to configure system settings.
+                    </p>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <a href="{{ url_for('system_settings_general') }}" class="card card-hover text-decoration-none">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-gear fs-1 text-primary mb-3"></i>
+                                    <h6>General Settings</h6>
+                                    <small class="text-muted">Configure application basics</small>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ url_for('system_settings_email') }}" class="card card-hover text-decoration-none">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-envelope fs-1 text-success mb-3"></i>
+                                    <h6>Email Settings</h6>
+                                    <small class="text-muted">Configure email notifications</small>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ url_for('system_settings_backup') }}" class="card card-hover text-decoration-none">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-database fs-1 text-warning mb-3"></i>
+                                    <h6>Backup & Restore</h6>
+                                    <small class="text-muted">Manage system backups</small>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="row mt-4">
+                <div class="col-md-6 mb-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">Users Summary</h6>
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <div class="h4 fw-bold text-primary">{{ user_stats.total if user_stats else 0 }}</div>
+                                    <small class="text-muted">Total</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="h4 fw-bold text-success">{{ user_stats.active if user_stats else 0 }}</div>
+                                    <small class="text-muted">Active</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="h4 fw-bold text-info">{{ user_stats.admins if user_stats else 0 }}</div>
+                                    <small class="text-muted">Admins</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-4">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">Tasks Summary</h6>
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <div class="h4 fw-bold text-primary">{{ task_stats.total if task_stats else 0 }}</div>
+                                    <small class="text-muted">Total</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="h4 fw-bold text-warning">{{ task_stats.open if task_stats else 0 }}</div>
+                                    <small class="text-muted">Open</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="h4 fw-bold text-success">{{ task_stats.completed if task_stats else 0 }}</div>
+                                    <small class="text-muted">Completed</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card-hover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.15);
+        transition: all 0.2s;
+        border-color: #0d6efd;
+    }
+    
+    .list-group-item.active {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+</style>
+{% endblock %}

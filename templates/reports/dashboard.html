@@ -1,0 +1,812 @@
+<!-- templates/reports/dashboard.html - FIXED VERSION with Data Accuracy Notes -->
+{% extends "base.html" %}
+
+{% block title %}Reports Dashboard - {{ app_name }}{% endblock %}
+
+{% block page_title %}Reports Dashboard{% endblock %}
+
+{% block page_description %}Analytics and performance metrics{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group">
+    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+        <i class="bi bi-calendar-range me-1"></i> 
+        {% if date_range == '7days' %}
+            Last 7 Days
+        {% elif date_range == '90days' %}
+            Last 90 Days
+        {% else %}
+            Last 30 Days
+        {% endif %}
+    </button>
+    <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="?date_range=7days">Last 7 Days</a></li>
+        <li><a class="dropdown-item" href="?date_range=30days">Last 30 Days</a></li>
+        <li><a class="dropdown-item" href="?date_range=90days">Last 90 Days</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#customRangeModal">
+            <i class="bi bi-calendar-week me-1"></i> Custom Range
+        </a></li>
+    </ul>
+    
+    <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+        <i class="bi bi-download me-1"></i> Export
+    </button>
+    <ul class="dropdown-menu">
+        <li><h6 class="dropdown-header">Export Tasks</h6></li>
+        <li><a class="dropdown-item" href="{{ url_for('export_report', report_type='tasks') }}?format=csv&date_range={{ date_range }}">
+            <i class="bi bi-file-earmark-spreadsheet me-2"></i> CSV Format
+        </a></li>
+        <li><a class="dropdown-item" href="{{ url_for('export_report', report_type='tasks') }}?format=json&date_range={{ date_range }}">
+            <i class="bi bi-code-slash me-2"></i> JSON Format
+        </a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><h6 class="dropdown-header">Export Users</h6></li>
+        <li><a class="dropdown-item" href="{{ url_for('export_report', report_type='users') }}?format=csv">
+            <i class="bi bi-file-earmark-spreadsheet me-2"></i> CSV Format
+        </a></li>
+    </ul>
+    
+    <!-- Debug button for data accuracy -->
+    {% if current_user.role == 'Admin' %}
+    <a href="{{ url_for('debug_task_data_accuracy') }}" class="btn btn-outline-info ms-2" target="_blank">
+        <i class="bi bi-bug me-1"></i> Debug Data
+    </a>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Date Range Info -->
+    <div class="alert alert-info mb-3">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <i class="bi bi-calendar-event me-2"></i>
+                Showing data from <strong>{{ start_date|format_date }}</strong> to <strong>{{ end_date|format_date }}</strong>
+                {% if date_range == '30days' or date_range == '7days' or date_range == '90days' %}
+                <br>
+                <small class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Includes all tasks created within this date range (inclusive of end date)
+                </small>
+                {% endif %}
+            </div>
+            <div class="col-md-4 text-md-end">
+                <small class="text-muted">Current time: {{ now|format_datetime }}</small>
+                <br>
+                <small class="text-muted">Data refreshed: {{ now|time_ago }}</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Accuracy Alert -->
+    {% if current_user.role == 'Admin' and total_tasks == 0 %}
+    <div class="alert alert-warning mb-3">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle me-2 fs-4"></i>
+            <div>
+                <strong>No tasks found for this date range.</strong>
+                <ul class="mb-0 mt-1">
+                    <li>Check if tasks were created within the selected date range</li>
+                    <li>Verify date filters include today's date</li>
+                    <li>Use the <a href="{{ url_for('debug_task_data_accuracy') }}" class="alert-link">Debug Data</a> tool to investigate</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-primary border-4 h-100">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <div class="text-xs fw-bold text-primary text-uppercase mb-1">Total Tasks</div>
+                            <div class="h5 mb-0 fw-bold">{{ total_tasks|default(0) }}</div>
+                            <div class="mt-2 mb-0 text-muted">
+                                <span class="text-success me-2">
+                                    <i class="bi bi-arrow-up"></i>
+                                </span>
+                                <span class="text-nowrap">All tasks in date range</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-list-task fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-warning border-4 h-100">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <div class="text-xs fw-bold text-warning text-uppercase mb-1">Open Tasks</div>
+                            <div class="h5 mb-0 fw-bold">{{ open_tasks|default(0) }}</div>
+                            <div class="mt-2 mb-0 text-muted">
+                                <span class="text-danger me-2">
+                                    {% set open_percentage = (open_tasks / total_tasks * 100) if total_tasks > 0 else 0 %}
+                                    {{ open_percentage|round(1) }}%
+                                </span>
+                                <span class="text-nowrap">of total tasks</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-clock-history fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-success border-4 h-100">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <div class="text-xs fw-bold text-success text-uppercase mb-1">Completed Tasks</div>
+                            <div class="h5 mb-0 fw-bold">{{ completed_tasks|default(0) }}</div>
+                            <div class="mt-2 mb-0 text-muted">
+                                <span class="text-success me-2">
+                                    {% set completed_percentage = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0 %}
+                                    {{ completed_percentage|round(1) }}%
+                                </span>
+                                <span class="text-nowrap">completion rate</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-check-circle fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-start border-info border-4 h-100">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <div class="text-xs fw-bold text-info text-uppercase mb-1">SLA Compliance</div>
+                            <div class="h5 mb-0 fw-bold">{{ sla_compliance|default(0) }}%</div>
+                            <div class="mt-2 mb-0 text-muted">
+                                <span class="text-info me-2">
+                                    <i class="bi bi-shield-check"></i>
+                                </span>
+                                <span class="text-nowrap">{{ met_sla|default(0) }}/{{ total_sla_tasks|default(0) }} tasks</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-shield-check fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts and Graphs Row -->
+    <div class="row mb-4">
+        <!-- Task Status Distribution -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-pie-chart me-2"></i>Task Status Distribution
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-pie">
+                        <canvas id="statusChart" height="250"></canvas>
+                    </div>
+                    <div class="mt-4 text-center small">
+                        {% for status, count in status_counts.items() %}
+                        <span class="me-3">
+                            <i class="bi bi-square-fill me-1" style="color: {{ 
+                                'rgb(78, 115, 223)' if status == 'New' else
+                                'rgb(28, 200, 138)' if status == 'In Progress' else
+                                'rgb(54, 185, 204)' if status == 'Resolved' else
+                                'rgb(231, 74, 59)' if status == 'Closed' else
+                                'rgb(246, 194, 62)' if status == 'Assigned' else
+                                'rgb(133, 135, 150)'
+                            }}"></i>
+                            {{ status }} ({{ count }})
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Priority Distribution -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-bar-chart me-2"></i>Priority Distribution
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-bar">
+                        <canvas id="priorityChart" height="250"></canvas>
+                    </div>
+                    <div class="mt-3 text-center small">
+                        {% for priority, count in priority_counts.items() %}
+                        <span class="me-3">
+                            <i class="bi bi-square-fill me-1" style="color: {{ 
+                                'rgb(40, 167, 69)' if priority == 'Low' else
+                                'rgb(0, 123, 255)' if priority == 'Medium' else
+                                'rgb(255, 193, 7)' if priority == 'High' else
+                                'rgb(220, 53, 69)'
+                            }}"></i>
+                            {{ priority }} ({{ count }})
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Department Performance and User Performance -->
+    <div class="row mb-4">
+        <!-- Department Performance -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-building me-2"></i>Department Performance
+                    </h6>
+                    {% if current_user.role == 'Admin' %}
+                    <a href="/tasks" class="btn btn-sm btn-outline-primary">
+                        View All Tasks
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if department_stats %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Department</th>
+                                    <th>Total Tasks</th>
+                                    <th>Open</th>
+                                    <th>Completed</th>
+                                    <th>Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for dept in department_stats %}
+                                <tr>
+                                    <td>
+                                        {% if current_user.role == 'Admin' %}
+                                        <a href="/tasks?department={{ dept.name|urlencode }}" class="text-decoration-none">
+                                            {{ dept.name }}
+                                        </a>
+                                        {% else %}
+                                        {{ dept.name }}
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ dept.total_tasks }}</td>
+                                    <td>
+                                        <span class="badge bg-warning">{{ dept.open_tasks }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">{{ dept.completed_tasks }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="progress" style="height: 6px;">
+                                            <div class="progress-bar bg-success" role="progressbar" 
+                                                 style="width: {{ dept.completion_rate }}%"
+                                                 aria-valuenow="{{ dept.completion_rate }}" 
+                                                 aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                        <small class="text-muted">{{ dept.completion_rate }}%</small>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-building display-4 mb-3"></i>
+                        <p>No department data available</p>
+                        {% if current_user.role == 'Supervisor' %}
+                        <small class="text-muted">Make sure tasks are assigned to your department: {{ current_user.department }}</small>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Performers -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-trophy me-2"></i>Top Performers
+                    </h6>
+                    <a href="{{ url_for('export_report', report_type='users') }}?format=csv" 
+                       class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-download me-1"></i> Export
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if user_performance %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Assigned</th>
+                                    <th>Completed</th>
+                                    <th>Completion Rate</th>
+                                    <th>Performance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user_data in user_performance %}
+                                {% set user = user_data.user %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-sm me-2">
+                                                <div class="avatar-title rounded-circle bg-primary text-white fw-bold">
+                                                    {{ user.first_name[0] if user.first_name else '?' }}{{ user.last_name[0] if user.last_name else '?' }}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div class="fw-bold">{{ user.full_name }}</div>
+                                                <small class="text-muted">{{ user.role }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{{ user_data.assigned_tasks }}</td>
+                                    <td>{{ user_data.completed_tasks }}</td>
+                                    <td>{{ user_data.completion_rate }}%</td>
+                                    <td>
+                                        {% if user_data.completion_rate >= 90 %}
+                                        <span class="badge bg-success">Excellent</span>
+                                        {% elif user_data.completion_rate >= 70 %}
+                                        <span class="badge bg-primary">Good</span>
+                                        {% elif user_data.completion_rate >= 50 %}
+                                        <span class="badge bg-warning">Average</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Needs Improvement</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-people display-4 mb-3"></i>
+                        <p>No user performance data available</p>
+                        <small class="text-muted">Make sure tasks are assigned to users within the date range</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Trend and Overdue Tasks -->
+    <div class="row">
+        <!-- Monthly Trend -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-graph-up me-2"></i>Monthly Trends (Last 6 Months)
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if monthly_trend %}
+                    <div class="chart-line">
+                        <canvas id="monthlyTrendChart" height="250"></canvas>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-graph-up display-4 mb-3"></i>
+                        <p>No trend data available</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Overdue Tasks -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-exclamation-triangle me-2"></i>Overdue Tasks
+                    </h6>
+                    <span class="badge bg-danger">{{ overdue_tasks_count|default(0) }}</span>
+                </div>
+                <div class="card-body">
+                    {% if overdue_tasks %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Task</th>
+                                    <th>Due Date</th>
+                                    <th>Assigned To</th>
+                                    <th>Priority</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in overdue_tasks %}
+                                <tr class="table-danger">
+                                    <td>
+                                        <a href="/tasks/{{ task.id }}" class="text-decoration-none">
+                                            {{ task.title|truncate(30) }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <small>{{ task.due_date|format_datetime('%Y-%m-%d') if task.due_date else 'N/A' }}</small>
+                                        <br>
+                                        <small class="text-danger">
+                                            Overdue
+                                        </small>
+                                    </td>
+                                    <td>
+                                        {% if task.assigned_to_user %}
+                                        <span class="badge bg-secondary">{{ task.assigned_to_user.full_name }}</span>
+                                        {% else %}
+                                        <span class="badge bg-warning">Unassigned</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 
+                                            'danger' if task.priority == 'Critical' else
+                                            'warning' if task.priority == 'High' else
+                                            'primary' if task.priority == 'Medium' else
+                                            'secondary'
+                                        }}">
+                                            {{ task.priority }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-success py-5">
+                        <i class="bi bi-check-circle display-4 mb-3"></i>
+                        <p>No overdue tasks - Great job!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLA Compliance Details -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-shield-check me-2"></i>SLA Compliance Details
+                    </h6>
+                    <a href="{{ url_for('report_sla_details') }}" class="btn btn-sm btn-outline-primary">
+                        View Detailed Report <i class="bi bi-arrow-right ms-1"></i>
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-4 mb-4">
+                            <div class="h2 fw-bold text-primary">{{ total_sla_tasks|default(0) }}</div>
+                            <div class="text-muted">Total SLA Tasks</div>
+                        </div>
+                        <div class="col-md-4 mb-4">
+                            <div class="h2 fw-bold text-success">{{ met_sla|default(0) }}</div>
+                            <div class="text-muted">SLA Met</div>
+                        </div>
+                        <div class="col-md-4 mb-4">
+                            <div class="h2 fw-bold text-danger">{{ missed_sla|default(0) }}</div>
+                            <div class="text-muted">SLA Missed</div>
+                        </div>
+                    </div>
+                    {% if total_sla_tasks and total_sla_tasks > 0 %}
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar bg-success" role="progressbar" 
+                             style="width: {{ sla_compliance|default(0) }}%"
+                             aria-valuenow="{{ sla_compliance|default(0) }}" 
+                             aria-valuemin="0" aria-valuemax="100">
+                            {{ sla_compliance|default(0) }}%
+                        </div>
+                    </div>
+                    <div class="row mt-3 text-center">
+                        <div class="col-md-6">
+                            <small class="text-success">
+                                <i class="bi bi-check-circle me-1"></i>
+                                {{ met_sla|default(0) }} tasks met SLA
+                            </small>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-danger">
+                                <i class="bi bi-exclamation-circle me-1"></i>
+                                {{ missed_sla|default(0) }} tasks missed SLA
+                            </small>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-shield-slash display-4 mb-3"></i>
+                        <p>No SLA data available for the selected period</p>
+                        <small class="text-muted">Tasks need to have SLA due dates calculated</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Data Accuracy Footer -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-info">
+                <div class="card-header bg-info text-white">
+                    <h6 class="m-0 font-weight-bold">
+                        <i class="bi bi-info-circle me-2"></i>Data Accuracy Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="bi bi-check-circle text-success me-2"></i>What's included:</h6>
+                            <ul class="mb-0">
+                                <li>All tasks created between {{ start_date|format_date }} and {{ end_date|format_date }}</li>
+                                <li>Tasks are filtered based on your user role and permissions</li>
+                                <li>Date range includes entire days (00:00 to 23:59)</li>
+                                <li>Data is shown in EAT timezone</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="bi bi-question-circle text-warning me-2"></i>If data seems incorrect:</h6>
+                            <ul class="mb-0">
+                                <li>Check the date range matches when tasks were created</li>
+                                <li>Verify your role/department permissions</li>
+                                <li>Refresh the page to get latest data</li>
+                                <li>Use the <strong>Debug Data</strong> tool for detailed analysis</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Range Modal -->
+<div class="modal fade" id="customRangeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Custom Date Range</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="GET" action="">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="start_date" class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" 
+                               value="{{ start_date|format_date('%Y-%m-%d') }}" required>
+                        <small class="text-muted">Inclusive start date (00:00:00)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="end_date" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" 
+                               value="{{ end_date|format_date('%Y-%m-%d') }}" required>
+                        <small class="text-muted">Inclusive end date (23:59:59)</small>
+                    </div>
+                    <input type="hidden" name="date_range" value="custom">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Apply Range</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Status Distribution Chart
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        const statusChart = new Chart(statusCtx, {
+            type: 'pie',
+            data: {
+                labels: {{ status_counts.keys()|list|tojson }},
+                datasets: [{
+                    data: {{ status_counts.values()|list|tojson }},
+                    backgroundColor: [
+                        'rgb(78, 115, 223)',    // New - Blue
+                        'rgb(28, 200, 138)',    // In Progress - Green
+                        'rgb(54, 185, 204)',    // Resolved - Cyan
+                        'rgb(231, 74, 59)',     // Closed - Red
+                        'rgb(246, 194, 62)',    // Assigned - Yellow
+                        'rgb(133, 135, 150)'    // On Hold - Gray
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? Math.round((value / total) * 100) : 0;
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Priority Distribution Chart
+        const priorityCtx = document.getElementById('priorityChart').getContext('2d');
+        const priorityChart = new Chart(priorityCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ priority_counts.keys()|list|tojson }},
+                datasets: [{
+                    label: 'Number of Tasks',
+                    data: {{ priority_counts.values()|list|tojson }},
+                    backgroundColor: [
+                        'rgba(40, 167, 69, 0.7)',   // Low - Green
+                        'rgba(0, 123, 255, 0.7)',   // Medium - Blue
+                        'rgba(255, 193, 7, 0.7)',   // High - Yellow
+                        'rgba(220, 53, 69, 0.7)'    // Critical - Red
+                    ],
+                    borderColor: [
+                        'rgb(40, 167, 69)',
+                        'rgb(0, 123, 255)',
+                        'rgb(255, 193, 7)',
+                        'rgb(220, 53, 69)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        },
+                        title: {
+                            display: true,
+                            text: 'Number of Tasks'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Priority Level'
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.dataset.label || '';
+                                const value = context.raw || 0;
+                                return `${label}: ${value}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Monthly Trend Chart
+        const trendCtx = document.getElementById('monthlyTrendChart');
+        if (trendCtx) {
+            const trendChart = new Chart(trendCtx.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: {{ monthly_trend|map(attribute='month')|list|tojson }},
+                    datasets: [
+                        {
+                            label: 'Tasks Created',
+                            data: {{ monthly_trend|map(attribute='tasks_created')|list|tojson }},
+                            borderColor: 'rgb(78, 115, 223)',
+                            backgroundColor: 'rgba(78, 115, 223, 0.1)',
+                            tension: 0.3,
+                            fill: true
+                        },
+                        {
+                            label: 'Tasks Completed',
+                            data: {{ monthly_trend|map(attribute='tasks_completed')|list|tojson }},
+                            borderColor: 'rgb(28, 200, 138)',
+                            backgroundColor: 'rgba(28, 200, 138, 0.1)',
+                            tension: 0.3,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Tasks'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Month'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    }
+                }
+            });
+        }
+
+        // Set default dates in custom range modal
+        const today = new Date();
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        
+        document.getElementById('start_date').valueAsDate = thirtyDaysAgo;
+        document.getElementById('end_date').valueAsDate = today;
+        
+        // Add data refresh reminder
+        setTimeout(() => {
+            const refreshAlert = document.createElement('div');
+            refreshAlert.className = 'alert alert-warning alert-dismissible fade show mt-3';
+            refreshAlert.innerHTML = `
+                <i class="bi bi-clock-history me-2"></i>
+                <strong>Data may be outdated.</strong> Consider refreshing the page for the latest data.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            // Only show after 5 minutes
+            setTimeout(() => {
+                document.querySelector('.container-fluid').appendChild(refreshAlert);
+            }, 300000); // 5 minutes
+        }, 1000);
+    });
+</script>
+{% endblock %}

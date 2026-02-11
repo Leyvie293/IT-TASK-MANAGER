@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}Performance Reports{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1>Performance Reports</h1>
+            <p class="text-muted">User performance metrics and productivity analysis</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('report.dashboard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Reports
+            </a>
+        </div>
+    </div>
+
+    <!-- Performance Summary -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Performance Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Department</th>
+                                    <th>Total Tasks</th>
+                                    <th>Completed</th>
+                                    <th>In Progress</th>
+                                    <th>Overdue</th>
+                                    <th>Completion Rate</th>
+                                    <th>Avg. Completion Time</th>
+                                    <th>Performance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user_data in performance_data %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ user_data.user.full_name }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ user_data.user.email }}</small>
+                                    </td>
+                                    <td>{{ user_data.user.department or 'N/A' }}</td>
+                                    <td>{{ user_data.total_tasks }}</td>
+                                    <td><span class="text-success">{{ user_data.completed }}</span></td>
+                                    <td><span class="text-primary">{{ user_data.in_progress }}</span></td>
+                                    <td>
+                                        {% if user_data.overdue > 0 %}
+                                        <span class="badge bg-danger">{{ user_data.overdue }}</span>
+                                        {% else %}
+                                        <span class="text-muted">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="progress" style="height: 20px;">
+                                            <div class="progress-bar bg-success" role="progressbar" 
+                                                 style="width: {{ user_data.completion_rate }}%;" 
+                                                 aria-valuenow="{{ user_data.completion_rate }}" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100">
+                                                {{ "%.1f"|format(user_data.completion_rate) }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if user_data.avg_completion_days > 0 %}
+                                        {{ user_data.avg_completion_days }} days
+                                        {% else %}
+                                        <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user_data.completion_rate >= 90 %}
+                                        <span class="badge bg-success">Excellent</span>
+                                        {% elif user_data.completion_rate >= 80 %}
+                                        <span class="badge bg-primary">Good</span>
+                                        {% elif user_data.completion_rate >= 70 %}
+                                        <span class="badge bg-warning">Fair</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">Needs Improvement</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {% if performance_data|length == 0 %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-people" style="font-size: 3rem; color: #6c757d;"></i>
+                        <h5 class="mt-3">No Performance Data</h5>
+                        <p class="text-muted">No users have been assigned tasks yet.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Charts -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Top Performers</h5>
+                </div>
+                <div class="card-body">
+                    <div id="topPerformersChart" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Department Performance</h5>
+                </div>
+                <div class="card-body">
+                    <div id="departmentChart" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Prepare data for charts
+    const topPerformers = {{ performance_data|tojson }};
+    
+    // Sort by completion rate and take top 5
+    const sortedPerformers = [...topPerformers]
+        .sort((a, b) => b.completion_rate - a.completion_rate)
+        .slice(0, 5);
+    
+    // Top Performers Chart
+    const performersCtx = document.createElement('canvas');
+    document.getElementById('topPerformersChart').appendChild(performersCtx);
+    
+    new Chart(performersCtx, {
+        type: 'bar',
+        data: {
+            labels: sortedPerformers.map(p => p.user.full_name.split(' ')[0]),
+            datasets: [{
+                label: 'Completion Rate (%)',
+                data: sortedPerformers.map(p => p.completion_rate),
+                backgroundColor: '#198754',
+                borderColor: '#146c43',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Completion Rate %'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+
+    // Group by department for department chart
+    const departmentData = {};
+    topPerformers.forEach(user => {
+        const dept = user.user.department || 'Unassigned';
+        if (!departmentData[dept]) {
+            departmentData[dept] = {
+                total: 0,
+                count: 0
+            };
+        }
+        departmentData[dept].total += user.completion_rate;
+        departmentData[dept].count += 1;
+    });
+
+    // Calculate averages
+    const departments = Object.keys(departmentData);
+    const avgCompletionRates = departments.map(dept => 
+        departmentData[dept].total / departmentData[dept].count
+    );
+
+    // Department Performance Chart
+    const deptCtx = document.createElement('canvas');
+    document.getElementById('departmentChart').appendChild(deptCtx);
+    
+    new Chart(deptCtx, {
+        type: 'pie',
+        data: {
+            labels: departments,
+            datasets: [{
+                data: avgCompletionRates,
+                backgroundColor: [
+                    '#198754', '#0dcaf0', '#6f42c1', '#fd7e14', '#20c997',
+                    '#ffc107', '#dc3545', '#6c757d', '#0d6efd', '#6610f2'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.label}: ${context.raw.toFixed(1)}%`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

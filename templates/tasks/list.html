@@ -1,0 +1,560 @@
+{% extends "base.html" %}
+
+{% block title %}Tasks - {{ app_name if app_name is defined else 'IT Task Manager' }}{% endblock %}
+
+{% block page_title %}
+    {{ page_title if page_title is defined else 'Tasks' }}
+    {% if current_status and current_status != 'all' %}
+        <span class="badge bg-info ms-2">{{ current_status }}</span>
+    {% endif %}
+    {% if current_priority and current_priority != 'all' %}
+        <span class="badge bg-danger ms-2">{{ current_priority }}</span>
+    {% endif %}
+{% endblock %}
+
+{% block page_description %}
+    {% if is_admin_view %}
+        Viewing all tasks across all departments
+    {% elif current_user.role == 'Supervisor' %}
+        Viewing tasks in {{ current_user.department }} department
+    {% else %}
+        Viewing your assigned tasks
+    {% endif %}
+{% endblock %}
+
+{% block page_actions %}
+    {% if current_user.role in ['Admin', 'Supervisor'] %}
+    <div class="dropdown">
+        <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-plus-circle me-1"></i> New Task
+        </button>
+        <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('create_task_standalone') }}">
+                <i class="bi bi-plus-square me-2"></i> Create Single Task
+            </a></li>
+            {% if current_user.role == 'Admin' %}
+            <li><a class="dropdown-item" href="{{ url_for('admin_bulk_operations') }}">
+                <i class="bi bi-collection me-2"></i> Bulk Operations
+            </a></li>
+            {% endif %}
+        </ul>
+    </div>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <!-- Filters -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark">
+                <h6 class="mb-0"><i class="bi bi-funnel me-2"></i> Filters</h6>
+            </div>
+            <div class="card-body">
+                <form method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Status</label>
+                        <select name="status" class="form-select">
+                            <option value="all" {% if current_status == 'all' %}selected{% endif %}>All Status</option>
+                            <option value="New" {% if current_status == 'New' %}selected{% endif %}>New</option>
+                            <option value="Assigned" {% if current_status == 'Assigned' %}selected{% endif %}>Assigned</option>
+                            <option value="In Progress" {% if current_status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                            <option value="On Hold" {% if current_status == 'On Hold' %}selected{% endif %}>On Hold</option>
+                            <option value="Resolved" {% if current_status == 'Resolved' %}selected{% endif %}>Resolved</option>
+                            <option value="Closed" {% if current_status == 'Closed' %}selected{% endif %}>Closed</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Priority</label>
+                        <select name="priority" class="form-select">
+                            <option value="all" {% if current_priority == 'all' %}selected{% endif %}>All Priority</option>
+                            <option value="Low" {% if current_priority == 'Low' %}selected{% endif %}>Low</option>
+                            <option value="Medium" {% if current_priority == 'Medium' %}selected{% endif %}>Medium</option>
+                            <option value="High" {% if current_priority == 'High' %}selected{% endif %}>High</option>
+                            <option value="Critical" {% if current_priority == 'Critical' %}selected{% endif %}>Critical</option>
+                        </select>
+                    </div>
+                    
+                    {% if current_user.role == 'Admin' %}
+                    <div class="col-md-3">
+                        <label class="form-label">Department</label>
+                        <select name="department" class="form-select">
+                            <option value="all" {% if current_department == 'all' %}selected{% endif %}>All Departments</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept }}" {% if current_department == dept %}selected{% endif %}>{{ dept }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Assigned To</label>
+                        <select name="assigned_to" class="form-select">
+                            <option value="all" {% if current_assigned == 'all' %}selected{% endif %}>All Users</option>
+                            <option value="me" {% if current_assigned == 'me' %}selected{% endif %}>Me ({{ current_user.first_name }})</option>
+                            <option value="unassigned" {% if current_assigned == 'unassigned' %}selected{% endif %}>Unassigned</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}" {% if current_assigned == user.id %}selected{% endif %}>
+                                {{ user.full_name }} ({{ user.role }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label">Category</label>
+                        <select name="category" class="form-select">
+                            <option value="all" {% if current_category == 'all' %}selected{% endif %}>All Categories</option>
+                            {% for category in categories %}
+                            <option value="{{ category }}" {% if current_category == category %}selected{% endif %}>{{ category }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <label class="form-label">Search</label>
+                        <div class="input-group">
+                            <input type="text" name="q" class="form-control" placeholder="Search tasks..." value="{{ current_search if current_search else '' }}">
+                            <button class="btn btn-outline-secondary" type="submit">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-filter me-1"></i> Apply Filters
+                        </button>
+                    </div>
+                    
+                    <div class="col-md-3 d-flex align-items-end">
+                        <a href="{{ url_for('task.task_list') }}" class="btn btn-outline-secondary w-100">
+                            <i class="bi bi-x-circle me-1"></i> Clear Filters
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tasks Table -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="bi bi-list-task me-2"></i> Tasks ({{ pagination.total if pagination else tasks|length }})</h6>
+                <div>
+                    <span class="badge bg-info me-2">{{ open_my_tasks if open_my_tasks is defined else 0 }} Open</span>
+                    <span class="badge bg-danger">{{ overdue_my_tasks if overdue_my_tasks is defined else 0 }} Overdue</span>
+                </div>
+            </div>
+            
+            {% if tasks %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th width="50">
+                                <input type="checkbox" id="select-all" class="form-check-input">
+                            </th>
+                            <th>Task ID</th>
+                            <th>Title</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Assigned To</th>
+                            <th>Department</th>
+                            <th>Category</th>
+                            <th>Due Date</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in tasks %}
+                        <tr class="{% if task.due_date and task.due_date < now and task.status in ['New', 'Assigned', 'In Progress'] %}table-danger{% endif %}">
+                            <td>
+                                <input type="checkbox" name="task_ids" value="{{ task.id }}" class="form-check-input task-checkbox">
+                            </td>
+                            <td>
+                                <span class="fw-bold">{{ task.task_id }}</span>
+                            </td>
+                            <td>
+                                <div class="fw-medium">{{ task.title|truncate(50) }}</div>
+                                {% if task.description %}
+                                <small class="text-muted">{{ task.description|truncate(100) }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if task.status == 'New' %}bg-secondary
+                                    {% elif task.status == 'Assigned' %}bg-primary
+                                    {% elif task.status == 'In Progress' %}bg-info
+                                    {% elif task.status == 'On Hold' %}bg-warning
+                                    {% elif task.status == 'Resolved' %}bg-success
+                                    {% elif task.status == 'Closed' %}bg-dark
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ task.status }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if task.priority == 'Low' %}bg-success
+                                    {% elif task.priority == 'Medium' %}bg-info
+                                    {% elif task.priority == 'High' %}bg-warning
+                                    {% elif task.priority == 'Critical' %}bg-danger
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ task.priority }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if task.assigned_to_user %}
+                                <div class="d-flex align-items-center">
+                                    <div class="me-2">
+                                        <i class="bi bi-person-circle"></i>
+                                    </div>
+                                    <div>
+                                        <div class="fw-medium">
+                                            {{ task.assigned_to_user.full_name }}
+                                        </div>
+                                        <small class="text-muted">
+                                            {{ task.assigned_to_user.role }}
+                                            {% if task.assigned_to_user.department %}
+                                            • {{ task.assigned_to_user.department }}
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <span class="badge bg-secondary">Unassigned</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ task.department or 'N/A' }}
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark">{{ task.category or 'General' }}</span>
+                            </td>
+                            <td>
+                                {% if task.due_date %}
+                                    {% if task.due_date < now and task.status in ['New', 'Assigned', 'In Progress'] %}
+                                    <span class="text-danger fw-bold">
+                                        <i class="bi bi-exclamation-triangle me-1"></i>
+                                        {{ task.due_date|format_date }}
+                                    </span>
+                                    {% else %}
+                                    {{ task.due_date|format_date }}
+                                    {% endif %}
+                                {% else %}
+                                <span class="text-muted">Not set</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ task.created_at|time_ago }}</small>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('task.view', task_id=task.id) if endpoint_exists('task.view') else '#' }}" 
+                                       class="btn btn-outline-info" title="View">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    {% if has_task_access(task, current_user) %}
+                                    <a href="{{ url_for('task.edit', task_id=task.id) if endpoint_exists('task.edit') else '#' }}" 
+                                       class="btn btn-outline-primary" title="Edit">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Bulk Actions -->
+            {% if current_user.role in ['Admin', 'Supervisor'] %}
+            <div class="card-footer bg-dark">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="dropdown">
+                                <i class="bi bi-gear me-1"></i> Bulk Actions
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item bulk-action-btn" href="#" data-action="assign">
+                                    <i class="bi bi-person-plus me-2"></i> Assign Tasks
+                                </a></li>
+                                <li><a class="dropdown-item bulk-action-btn" href="#" data-action="status">
+                                    <i class="bi bi-arrow-repeat me-2"></i> Update Status
+                                </a></li>
+                                <li><a class="dropdown-item bulk-action-btn" href="#" data-action="priority">
+                                    <i class="bi bi-exclamation-triangle me-2"></i> Update Priority
+                                </a></li>
+                                {% if current_user.role == 'Admin' %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item bulk-action-btn text-danger" href="#" data-action="delete">
+                                    <i class="bi bi-trash me-2"></i> Delete Tasks
+                                </a></li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <small class="text-muted">
+                            Showing {{ pagination.first }} - {{ pagination.last }} of {{ pagination.total }} tasks
+                        </small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Pagination -->
+            {% if pagination and pagination.pages > 1 %}
+            <div class="card-footer">
+                <nav aria-label="Task pagination">
+                    <ul class="pagination justify-content-center mb-0">
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('task.task_list', page=pagination.prev_num, status=current_status, priority=current_priority, assigned_to=current_assigned, department=current_department, category=current_category, q=current_search) }}">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                        
+                        {% for page in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                            {% if page %}
+                                {% if page != pagination.page %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('task.task_list', page=page, status=current_status, priority=current_priority, assigned_to=current_assigned, department=current_department, category=current_category, q=current_search) }}">
+                                        {{ page }}
+                                    </a>
+                                </li>
+                                {% else %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page }}</span>
+                                </li>
+                                {% endif %}
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('task.task_list', page=pagination.next_num, status=current_status, priority=current_priority, assigned_to=current_assigned, department=current_department, category=current_category, q=current_search) }}">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+            
+            {% else %}
+            <div class="card-body text-center py-5">
+                <div class="mb-3">
+                    <i class="bi bi-inbox display-1 text-muted"></i>
+                </div>
+                <h4 class="text-muted">No tasks found</h4>
+                <p class="text-muted mb-4">
+                    {% if current_search or current_status != 'all' or current_priority != 'all' or current_assigned != 'all' %}
+                    Try adjusting your filters or create a new task.
+                    {% else %}
+                    No tasks have been created yet.
+                    {% endif %}
+                </p>
+                {% if current_user.role in ['Admin', 'Supervisor'] %}
+                <a href="{{ url_for('create_task_standalone') }}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle me-1"></i> Create New Task
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Action Modals -->
+{% if current_user.role in ['Admin', 'Supervisor'] %}
+<!-- Assign Modal -->
+<div class="modal fade" id="assignModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Assign Tasks</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{{ url_for('task.bulk_assign') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Assign to User</label>
+                        <select name="user_id" class="form-select" required>
+                            <option value="">Select user...</option>
+                            <option value="unassigned">Unassigned</option>
+                            {% for user in get_department_users() %}
+                            <option value="{{ user.id }}">{{ user.full_name }} ({{ user.role }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <input type="hidden" name="task_ids" id="assign-task-ids">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Assign Tasks</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Status Modal -->
+<div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Update Task Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{{ url_for('task.bulk_update_status') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">New Status</label>
+                        <select name="status" class="form-select" required>
+                            <option value="">Select status...</option>
+                            <option value="New">New</option>
+                            <option value="Assigned">Assigned</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Resolved">Resolved</option>
+                            {% if current_user.role == 'Admin' %}
+                            <option value="Closed">Closed</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    <input type="hidden" name="task_ids" id="status-task-ids">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Priority Modal -->
+<div class="modal fade" id="priorityModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Update Task Priority</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{{ url_for('task.bulk_update_status') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">New Priority</label>
+                        <select name="priority" class="form-select" required>
+                            <option value="">Select priority...</option>
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                            <option value="Critical">Critical</option>
+                        </select>
+                    </div>
+                    <input type="hidden" name="task_ids" id="priority-task-ids">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Priority</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Modal -->
+{% if current_user.role == 'Admin' %}
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete Tasks</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{{ url_for('task.bulk_delete') }}">
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Are you sure you want to delete the selected tasks? This action cannot be undone.
+                    </div>
+                    <input type="hidden" name="task_ids" id="delete-task-ids">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Delete Tasks</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Select all checkbox
+    document.getElementById('select-all').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.task-checkbox');
+        checkboxes.forEach(cb => cb.checked = this.checked);
+    });
+    
+    // Bulk action handlers
+    document.addEventListener('DOMContentLoaded', function() {
+        const bulkActionBtns = document.querySelectorAll('.bulk-action-btn');
+        
+        bulkActionBtns.forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                const selectedTasks = getSelectedTaskIds();
+                if (selectedTasks.length === 0) {
+                    alert('Please select at least one task.');
+                    return;
+                }
+                
+                const action = this.dataset.action;
+                showBulkActionModal(action, selectedTasks);
+            });
+        });
+    });
+    
+    function getSelectedTaskIds() {
+        const checkboxes = document.querySelectorAll('.task-checkbox:checked');
+        return Array.from(checkboxes).map(cb => cb.value);
+    }
+    
+    function showBulkActionModal(action, taskIds) {
+        const modalId = action + 'Modal';
+        const taskIdsField = action + '-task-ids';
+        
+        document.getElementById(taskIdsField).value = taskIds.join(',');
+        
+        const modal = new bootstrap.Modal(document.getElementById(modalId));
+        modal.show();
+    }
+    
+    // Update select all checkbox state
+    document.addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.task-checkbox');
+        const selectAll = document.getElementById('select-all');
+        
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+        
+        selectAll.checked = allChecked;
+        selectAll.indeterminate = anyChecked && !allChecked;
+    });
+</script>
+{% endblock %}

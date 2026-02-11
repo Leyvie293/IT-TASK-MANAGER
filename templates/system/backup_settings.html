@@ -1,0 +1,340 @@
+<!-- templates/system/backup_settings.html -->
+{% extends "base.html" %}
+
+{% block title %}Backup & Restore - {{ app_name }}{% endblock %}
+
+{% block page_title %}Backup & Restore{% endblock %}
+
+{% block page_description %}Manage system backups and restoration{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group">
+    <a href="{{ url_for('system_settings') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back to Settings
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Backup Actions -->
+    <div class="row mb-4">
+        <div class="col-md-4 mb-4">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <i class="bi bi-database-add display-4 text-primary mb-3"></i>
+                    <h5>Create Backup</h5>
+                    <p class="text-muted">Create a new backup of the system database</p>
+                    <form method="POST" action="{{ url_for('system_settings_backup') }}">
+                        <input type="hidden" name="action" value="backup">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-circle me-1"></i> Create Backup
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4 mb-4">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <i class="bi bi-database-check display-4 text-success mb-3"></i>
+                    <h5>Auto Backup</h5>
+                    <p class="text-muted">Configure automatic backup schedules</p>
+                    <button type="button" class="btn btn-outline-success w-100" data-bs-toggle="modal" data-bs-target="#autoBackupModal">
+                        <i class="bi bi-calendar-week me-1"></i> Configure
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4 mb-4">
+            <div class="card text-center h-100">
+                <div class="card-body">
+                    <i class="bi bi-database-down display-4 text-warning mb-3"></i>
+                    <h5>Restore</h5>
+                    <p class="text-muted">Restore system from a backup file</p>
+                    <button type="button" class="btn btn-outline-warning w-100" data-bs-toggle="modal" data-bs-target="#restoreModal">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> Restore System
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup Files List -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-archive me-2"></i>Available Backups
+            </h5>
+            <div class="btn-group">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshBackups()">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if backup_files %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Size</th>
+                            <th>Created</th>
+                            <th>Type</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for backup in backup_files %}
+                        <tr>
+                            <td>
+                                <i class="bi bi-file-earmark-zip me-2"></i>
+                                {{ backup.name }}
+                            </td>
+                            <td>
+                                {{ (backup.size / 1024)|round(2) }} KB
+                            </td>
+                            <td>
+                                {{ backup.modified.strftime('%Y-%m-%d %H:%M') }}
+                            </td>
+                            <td>
+                                <span class="badge bg-info">Database</span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="/download-backup/{{ backup.name }}" class="btn btn-outline-primary">
+                                        <i class="bi bi-download"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-outline-success" onclick="restoreBackup('{{ backup.name }}')">
+                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger" onclick="deleteBackup('{{ backup.name }}')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-database-x display-1 text-muted mb-3"></i>
+                <h5 class="text-muted">No Backups Found</h5>
+                <p class="text-muted">Create your first backup to protect your data</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Backup Statistics -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Backup Statistics</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6 mb-3">
+                            <div class="h4 fw-bold text-primary">{{ backup_files|length }}</div>
+                            <small class="text-muted">Total Backups</small>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <div class="h4 fw-bold text-success">
+                                {% if backup_files %}
+                                    {{ (backup_files|map(attribute='size')|sum / 1024 / 1024)|round(2) }} MB
+                                {% else %}
+                                    0 MB
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">Total Size</small>
+                        </div>
+                    </div>
+                    <div class="progress" style="height: 10px;">
+                        <div class="progress-bar bg-warning" role="progressbar" 
+                             style="width: 65%" aria-valuenow="65" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <small class="text-muted">65% of storage quota used (10 GB total)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Backup Information</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">Backup Location</small>
+                        <div class="fw-bold">/backups/</div>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Last Backup</small>
+                        <div class="fw-bold">
+                            {% if backup_files %}
+                                {{ backup_files[0].modified.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                                Never
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Backup Format</small>
+                        <div class="fw-bold">SQL + JSON Export</div>
+                    </div>
+                    <div>
+                        <small class="text-muted">Encryption</small>
+                        <div class="fw-bold">AES-256 Enabled</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Auto Backup Modal -->
+<div class="modal fade" id="autoBackupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Automatic Backup Configuration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('system_settings_backup') }}">
+                <div class="modal-body">
+                    <input type="hidden" name="action" value="configure_auto">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Enable Auto Backup</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" 
+                                   id="enable_auto_backup" name="enable_auto_backup" checked>
+                            <label class="form-check-label" for="enable_auto_backup">
+                                Enable automatic backups
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="backup_frequency" class="form-label">Frequency</label>
+                        <select class="form-select" id="backup_frequency" name="backup_frequency">
+                            <option value="daily">Daily</option>
+                            <option value="weekly" selected>Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="backup_time" class="form-label">Backup Time</label>
+                        <input type="time" class="form-control" id="backup_time" name="backup_time" value="02:00">
+                        <div class="form-text">Schedule time for automatic backups (server time)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="retention_days" class="form-label">Retention Period</label>
+                        <input type="number" class="form-control" id="retention_days" name="retention_days" value="30" min="1" max="365">
+                        <div class="form-text">Days to keep backups before automatic deletion</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Configuration</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Restore Modal -->
+<div class="modal fade" id="restoreModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Restore System</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('system_settings_backup') }}">
+                <div class="modal-body">
+                    <input type="hidden" name="action" value="restore">
+                    
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Warning:</strong> Restoring from a backup will overwrite all current data. 
+                        This action cannot be undone.
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="backup_file" class="form-label">Select Backup File</label>
+                        <select class="form-select" id="backup_file" name="backup_file" required>
+                            <option value="">Select a backup file...</option>
+                            {% for backup in backup_files %}
+                            <option value="{{ backup.name }}">{{ backup.name }} ({{ backup.modified.strftime('%Y-%m-%d') }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="restore_type" class="form-label">Restore Type</label>
+                        <select class="form-select" id="restore_type" name="restore_type">
+                            <option value="full">Full Restore (All Data)</option>
+                            <option value="users_only">Users Only</option>
+                            <option value="tasks_only">Tasks Only</option>
+                            <option value="settings_only">Settings Only</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="confirm_restore" required>
+                        <label class="form-check-label" for="confirm_restore">
+                            I understand this will overwrite current data
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Restore System</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function refreshBackups() {
+        location.reload();
+    }
+    
+    function restoreBackup(filename) {
+        if (confirm(`Are you sure you want to restore from ${filename}? This will overwrite current data.`)) {
+            // Implement restore logic here
+            alert('Restore functionality would be triggered for: ' + filename);
+        }
+    }
+    
+    function deleteBackup(filename) {
+        if (confirm(`Are you sure you want to delete ${filename}?`)) {
+            fetch(`/delete-backup/${filename}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Failed to delete backup: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Error deleting backup: ' + error.message);
+            });
+        }
+    }
+</script>
+{% endblock %}

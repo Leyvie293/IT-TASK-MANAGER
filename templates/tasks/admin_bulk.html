@@ -1,0 +1,922 @@
+<!-- templates/tasks/admin_bulk.html -->
+{% extends "base.html" %}
+
+{% block title %}Bulk Operations - {{ super() }}{% endblock %}
+
+{% block page_title %}Bulk Operations{% endblock %}
+
+{% block page_description %}Perform batch operations on multiple tasks at once{% endblock %}
+
+{% block page_actions %}
+    <div class="btn-group">
+        <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-gear me-1"></i> Actions
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#importModal">
+                <i class="bi bi-upload me-2"></i> Import Tasks
+            </a></li>
+            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#exportModal">
+                <i class="bi bi-download me-2"></i> Export Tasks
+            </a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ safe_url_for('review_tasks') }}">
+                <i class="bi bi-clipboard-check me-2"></i> Review Tasks
+            </a></li>
+            <li><a class="dropdown-item" href="{{ safe_url_for('dashboard') }}">
+                <i class="bi bi-speedometer2 me-2"></i> Dashboard
+            </a></li>
+        </ul>
+    </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .bulk-section {
+        background: var(--bs-dark);
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid var(--bs-gray-700);
+        transition: all 0.3s ease;
+    }
+    .bulk-section:hover {
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 15px rgba(13, 110, 253, 0.1);
+    }
+    .bulk-section h5 {
+        color: var(--bs-light);
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid var(--bs-gray-700);
+    }
+    .task-checkbox {
+        transform: scale(1.1);
+        margin-right: 10px;
+    }
+    .task-item {
+        padding: 0.75rem;
+        margin: 0.25rem 0;
+        background: var(--bs-gray-900);
+        border-radius: 6px;
+        border-left: 4px solid var(--bs-primary);
+        transition: all 0.2s ease;
+    }
+    .task-item:hover {
+        background: var(--bs-gray-800);
+        transform: translateX(5px);
+    }
+    .task-item.completed {
+        border-left-color: var(--bs-success);
+    }
+    .task-item.pending {
+        border-left-color: var(--bs-warning);
+    }
+    .task-item.overdue {
+        border-left-color: var(--bs-danger);
+    }
+    .select-all-section {
+        background: var(--bs-gray-800);
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    .priority-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    .badge-critical {
+        background-color: #dc3545;
+        color: white;
+    }
+    .badge-high {
+        background-color: #fd7e14;
+        color: white;
+    }
+    .badge-medium {
+        background-color: #ffc107;
+        color: black;
+    }
+    .badge-low {
+        background-color: #28a745;
+        color: white;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: var(--bs-gray-600);
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+    .pagination-container {
+        background: var(--bs-gray-900);
+        padding: 1rem;
+        border-radius: 8px;
+        margin-top: 1rem;
+    }
+    .user-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        background: var(--bs-gray-800);
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Selection Panel -->
+    <div class="col-lg-3 mb-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title mb-3">
+                    <i class="bi bi-funnel me-2"></i>Filter Tasks
+                </h6>
+                
+                <div class="mb-3">
+                    <label class="form-label">Status</label>
+                    <select class="form-select form-select-sm" id="filterStatus">
+                        <option value="">All Status</option>
+                        <option value="New" {% if current_filters.status == 'New' %}selected{% endif %}>New</option>
+                        <option value="Assigned" {% if current_filters.status == 'Assigned' %}selected{% endif %}>Assigned</option>
+                        <option value="In Progress" {% if current_filters.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                        <option value="Resolved" {% if current_filters.status == 'Resolved' %}selected{% endif %}>Completed</option>
+                        <option value="On Hold" {% if current_filters.status == 'On Hold' %}selected{% endif %}>On Hold</option>
+                        <option value="Cancelled" {% if current_filters.status == 'Cancelled' %}selected{% endif %}>Cancelled</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Priority</label>
+                    <select class="form-select form-select-sm" id="filterPriority">
+                        <option value="">All Priority</option>
+                        <option value="Critical" {% if current_filters.priority == 'Critical' %}selected{% endif %}>Critical</option>
+                        <option value="High" {% if current_filters.priority == 'High' %}selected{% endif %}>High</option>
+                        <option value="Medium" {% if current_filters.priority == 'Medium' %}selected{% endif %}>Medium</option>
+                        <option value="Low" {% if current_filters.priority == 'Low' %}selected{% endif %}>Low</option>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Department</label>
+                    <select class="form-select form-select-sm" id="filterDepartment">
+                        <option value="">All Departments</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept }}" {% if current_filters.department == dept %}selected{% endif %}>{{ dept }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Date Range</label>
+                    <select class="form-select form-select-sm" id="filterDate">
+                        <option value="">All Time</option>
+                        <option value="today" {% if current_filters.date_range == 'today' %}selected{% endif %}>Today</option>
+                        <option value="week" {% if current_filters.date_range == 'week' %}selected{% endif %}>This Week</option>
+                        <option value="month" {% if current_filters.date_range == 'month' %}selected{% endif %}>This Month</option>
+                        <option value="overdue" {% if current_filters.date_range == 'overdue' %}selected{% endif %}>Overdue</option>
+                    </select>
+                </div>
+                
+                <div class="d-grid gap-2 mt-4">
+                    <button class="btn btn-sm btn-outline-primary" id="applyFilters">
+                        <i class="bi bi-filter me-1"></i> Apply Filters
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="clearFilters">
+                        <i class="bi bi-x-circle me-1"></i> Clear All
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Stats -->
+        <div class="card border-0 shadow-sm mt-3">
+            <div class="card-body">
+                <h6 class="card-title mb-3">
+                    <i class="bi bi-bar-chart me-2"></i>Selection Stats
+                </h6>
+                <div class="row text-center">
+                    <div class="col-6 mb-2">
+                        <div class="small text-muted">Selected</div>
+                        <div class="h4" id="selectedCount">0</div>
+                    </div>
+                    <div class="col-6 mb-2">
+                        <div class="small text-muted">Total</div>
+                        <div class="h4" id="totalCount">{{ tasks|length }}</div>
+                    </div>
+                </div>
+                <div class="progress mt-2">
+                    <div class="progress-bar bg-success" id="selectionProgress" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Operations Panel -->
+    <div class="col-lg-9">
+        <!-- Selection Tools -->
+        <div class="select-all-section mb-4">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <div class="form-check">
+                        <input class="form-check-input task-checkbox" type="checkbox" id="selectAllTasks">
+                        <label class="form-check-label fw-bold" for="selectAllTasks">
+                            Select All Visible Tasks
+                        </label>
+                    </div>
+                    <small class="text-muted" id="selectedText">No tasks selected</small>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button class="btn btn-sm btn-outline-danger me-2" id="clearSelection">
+                        <i class="bi bi-x-circle me-1"></i> Clear Selection
+                    </button>
+                    <button class="btn btn-sm btn-primary" data-bs-toggle="collapse" data-bs-target="#bulkActionsPanel">
+                        <i class="bi bi-lightning me-1"></i> Perform Bulk Actions
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bulk Actions Panel -->
+        <div class="collapse" id="bulkActionsPanel">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <h6 class="card-title mb-3">
+                        <i class="bi bi-collection me-2"></i>Bulk Actions
+                    </h6>
+                    
+                    <div class="row g-3">
+                        <!-- Status Update -->
+                        <div class="col-md-6">
+                            <div class="bulk-section">
+                                <h5><i class="bi bi-arrow-repeat me-2"></i>Update Status</h5>
+                                <form method="POST" action="{{ safe_url_for('admin_bulk_status_update') }}" id="statusForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">New Status</label>
+                                        <select name="status" class="form-select" required>
+                                            <option value="">Select status...</option>
+                                            <option value="New">New</option>
+                                            <option value="Assigned">Assigned</option>
+                                            <option value="In Progress">In Progress</option>
+                                            <option value="Resolved">Completed</option>
+                                            <option value="On Hold">On Hold</option>
+                                            <option value="Cancelled">Cancelled</option>
+                                        </select>
+                                    </div>
+                                    <input type="hidden" name="task_ids" id="statusTaskIds">
+                                    <button type="submit" class="btn btn-outline-primary w-100" id="updateStatusBtn" disabled>
+                                        <i class="bi bi-arrow-repeat me-1"></i> Update Status
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Priority Update -->
+                        <div class="col-md-6">
+                            <div class="bulk-section">
+                                <h5><i class="bi bi-flag me-2"></i>Update Priority</h5>
+                                <form method="POST" action="{{ safe_url_for('admin_bulk_priority_update') }}" id="priorityForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">New Priority</label>
+                                        <select name="priority" class="form-select" required>
+                                            <option value="">Select priority...</option>
+                                            <option value="Critical">Critical</option>
+                                            <option value="High">High</option>
+                                            <option value="Medium">Medium</option>
+                                            <option value="Low">Low</option>
+                                        </select>
+                                    </div>
+                                    <input type="hidden" name="task_ids" id="priorityTaskIds">
+                                    <button type="submit" class="btn btn-outline-warning w-100" id="updatePriorityBtn" disabled>
+                                        <i class="bi bi-flag me-1"></i> Update Priority
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Assign to Technician -->
+                        <div class="col-md-6">
+                            <div class="bulk-section">
+                                <h5><i class="bi bi-person-plus me-2"></i>Assign Tasks</h5>
+                                <form method="POST" action="{{ safe_url_for('admin_bulk_assign') }}" id="assignForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">Assign to User</label>
+                                        <select name="assigned_to" class="form-select" required>
+                                            <option value="">Select user...</option>
+                                            <option value="unassigned">Unassigned</option>
+                                            {% for user in users %}
+                                            <option value="{{ user.id }}">
+                                                {{ user.first_name }} {{ user.last_name }} 
+                                                {% if user.role %}({{ user.role }}){% endif %}
+                                                {% if user.department %}- {{ user.department }}{% endif %}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <input type="hidden" name="task_ids" id="assignTaskIds">
+                                    <button type="submit" class="btn btn-outline-info w-100" id="assignTasksBtn" disabled>
+                                        <i class="bi bi-person-plus me-1"></i> Assign Tasks
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Bulk Delete -->
+                        <div class="col-md-6">
+                            <div class="bulk-section">
+                                <h5><i class="bi bi-trash me-2 text-danger"></i>Delete Tasks</h5>
+                                <p class="small text-muted mb-3">Permanently remove selected tasks</p>
+                                <form method="POST" action="{{ safe_url_for('admin_bulk_delete') }}" id="deleteForm">
+                                    <input type="hidden" name="task_ids" id="deleteTaskIds">
+                                    <button type="button" class="btn btn-outline-danger w-100" id="deleteTasksBtn" disabled
+                                            data-bs-toggle="modal" data-bs-target="#confirmDeleteModal">
+                                        <i class="bi bi-trash me-1"></i> Delete Selected
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tasks List -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                {% if tasks %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th width="50">
+                                    <input type="checkbox" class="form-check-input" id="selectAllTable">
+                                </th>
+                                <th>Task</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Department</th>
+                                <th>Due Date</th>
+                                <th>Assigned To</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for task in tasks %}
+                            <tr class="task-item {% if task.status == 'Resolved' %}completed{% elif task.status == 'In Progress' %}in-progress{% elif task.status in ['New', 'Assigned'] %}pending{% endif %} {% if task.is_overdue %}overdue{% endif %}">
+                                <td>
+                                    <input type="checkbox" class="form-check-input task-checkbox task-selector" 
+                                           value="{{ task.id }}" data-task-id="{{ task.id }}">
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-start">
+                                        <div>
+                                            <strong class="d-block">{{ task.title }}</strong>
+                                            <small class="text-muted">
+                                                {% if task.task_id %}
+                                                    {{ task.task_id }} • 
+                                                {% else %}
+                                                    #{{ task.id[:8] }} • 
+                                                {% endif %}
+                                                Created: {{ task.created_at|format_date if task.created_at else 'N/A' }}
+                                            </small>
+                                            {% if task.description and task.description|length > 50 %}
+                                            <div class="small text-muted mt-1">
+                                                {{ task.description[:100] }}...
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge priority-badge 
+                                        {% if task.priority == 'Critical' %}badge-critical
+                                        {% elif task.priority == 'High' %}badge-high
+                                        {% elif task.priority == 'Medium' %}badge-medium
+                                        {% elif task.priority == 'Low' %}badge-low
+                                        {% else %}bg-secondary{% endif %}">
+                                        {{ task.priority }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge status-badge bg-{{ 
+                                        'success' if task.status == 'Resolved'
+                                        else 'warning' if task.status in ['New', 'Assigned']
+                                        else 'info' if task.status == 'In Progress'
+                                        else 'secondary' if task.status == 'On Hold'
+                                        else 'danger' if task.status == 'Cancelled'
+                                        else 'secondary'
+                                    }}">
+                                        {{ task.status }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if task.department %}
+                                    <span class="badge bg-dark">{{ task.department }}</span>
+                                    {% else %}
+                                    <span class="text-muted">No department</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if task.due_date %}
+                                    <div class="d-flex flex-column">
+                                        <span class="{% if task.is_overdue %}text-danger{% endif %}">
+                                            {{ task.due_date|format_date }}
+                                        </span>
+                                        {% if task.is_overdue %}
+                                        <small class="text-danger">
+                                            <i class="bi bi-exclamation-triangle me-1"></i> Overdue
+                                        </small>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted">No due date</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <!-- FIXED: Changed from task.assigned_user to task.assigned_to_user -->
+                                    {% if task.assigned_to_user %}
+                                    <div class="d-flex align-items-center">
+                                        <div class="me-2">
+                                            <i class="bi bi-person-circle"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-medium">
+                                                {{ task.assigned_to_user.full_name if task.assigned_to_user.full_name else task.assigned_to_user.first_name ~ ' ' ~ task.assigned_to_user.last_name }}
+                                            </div>
+                                            <small class="text-muted">
+                                                {{ task.assigned_to_user.role }}
+                                                {% if task.assigned_to_user.department %}
+                                                • {{ task.assigned_to_user.department }}
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                    </div>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Unassigned</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                {% if pagination and pagination.pages > 1 %}
+                <div class="pagination-container">
+                    <nav aria-label="Task pagination">
+                        <ul class="pagination justify-content-center mb-0">
+                            {% if pagination.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ safe_url_for('admin_bulk_operations', page=pagination.prev_num, **current_filters) }}">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                            {% endif %}
+                            
+                            {% for page_num in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                                {% if page_num %}
+                                    {% if page_num == pagination.page %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ page_num }}</span>
+                                    </li>
+                                    {% else %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ safe_url_for('admin_bulk_operations', page=page_num, **current_filters) }}">
+                                            {{ page_num }}
+                                        </a>
+                                    </li>
+                                    {% endif %}
+                                {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if pagination.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ safe_url_for('admin_bulk_operations', page=pagination.next_num, **current_filters) }}">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    <div class="text-center mt-2">
+                        <small class="text-muted">
+                            Showing {{ ((pagination.page - 1) * pagination.per_page) + 1 }} to 
+                            {{ min(pagination.page * pagination.per_page, pagination.total) }} of 
+                            {{ pagination.total }} tasks
+                        </small>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-inbox"></i>
+                    <h5 class="mt-3">No tasks found</h5>
+                    <p class="text-muted">Try adjusting your filters or create new tasks.</p>
+                    <a href="{{ safe_url_for('create_task_standalone') }}" class="btn btn-primary mt-2">
+                        <i class="bi bi-plus-circle me-1"></i> Create New Task
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark">
+            <div class="modal-header border-0">
+                <h5 class="modal-title text-danger">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>Confirm Deletion
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>You are about to delete <span id="deleteCount" class="fw-bold">0</span> task(s). This action cannot be undone.</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-circle me-2"></i>
+                    <strong>Warning:</strong> All associated data including comments and attachments will be permanently removed.
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="confirmDeleteCheckbox">
+                    <label class="form-check-label" for="confirmDeleteCheckbox">
+                        I understand this action is irreversible
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn" disabled>
+                    <i class="bi bi-trash me-1"></i> Delete Tasks
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal fade" id="exportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">Export Tasks</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Export tasks in the selected format:</p>
+                <div class="mb-3">
+                    <label class="form-label">Export Format</label>
+                    <select class="form-select" id="exportFormat">
+                        <option value="csv">CSV (Excel compatible)</option>
+                        <option value="json">JSON</option>
+                        <option value="pdf">PDF Report</option>
+                    </select>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="exportSelectedOnly">
+                    <label class="form-check-label" for="exportSelectedOnly">
+                        Export only selected tasks
+                    </label>
+                </div>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    CSV exports will include: Task ID, Title, Description, Status, Priority, Department, Assigned To, Due Date, Created Date
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="exportBtn">
+                    <i class="bi bi-download me-1"></i> Export
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Tasks</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="importForm" method="POST" action="{{ safe_url_for('admin_bulk_import') }}" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <p>Upload a CSV file to import multiple tasks at once.</p>
+                    <div class="mb-3">
+                        <label for="importFile" class="form-label">CSV File</label>
+                        <input class="form-control" type="file" id="importFile" name="import_file" accept=".csv" required>
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        <strong>Required columns:</strong> title, description, priority, department<br>
+                        <strong>Optional columns:</strong> due_date (YYYY-MM-DD), assigned_to (email)
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="skipErrors" name="skip_errors">
+                        <label class="form-check-label" for="skipErrors">
+                            Skip rows with errors
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-upload me-1"></i> Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Task selection management
+    let selectedTasks = new Set();
+    
+    // Update selection stats
+    function updateSelectionStats() {
+        const selectedCount = selectedTasks.size;
+        const totalCount = parseInt(document.getElementById('totalCount').textContent) || 0;
+        
+        document.getElementById('selectedCount').textContent = selectedCount;
+        document.getElementById('selectedText').textContent = 
+            selectedCount === 0 ? 'No tasks selected' : `${selectedCount} task(s) selected`;
+        
+        // Update progress bar
+        const progress = totalCount > 0 ? (selectedCount / totalCount) * 100 : 0;
+        document.getElementById('selectionProgress').style.width = `${progress}%`;
+        
+        // Update delete count in modal
+        document.getElementById('deleteCount').textContent = selectedCount;
+        
+        // Enable/disable bulk action buttons
+        const hasSelection = selectedCount > 0;
+        document.getElementById('updateStatusBtn').disabled = !hasSelection;
+        document.getElementById('updatePriorityBtn').disabled = !hasSelection;
+        document.getElementById('assignTasksBtn').disabled = !hasSelection;
+        document.getElementById('deleteTasksBtn').disabled = !hasSelection;
+        
+        // Update hidden inputs with selected task IDs
+        const taskIds = Array.from(selectedTasks).join(',');
+        document.getElementById('statusTaskIds').value = taskIds;
+        document.getElementById('priorityTaskIds').value = taskIds;
+        document.getElementById('assignTaskIds').value = taskIds;
+        document.getElementById('deleteTaskIds').value = taskIds;
+        
+        // Show/hide bulk actions panel
+        const bulkPanel = document.getElementById('bulkActionsPanel');
+        if (hasSelection && !bulkPanel.classList.contains('show')) {
+            new bootstrap.Collapse(bulkPanel).show();
+        }
+    }
+    
+    // Task checkbox handling
+    document.addEventListener('DOMContentLoaded', function() {
+        // Select all checkboxes
+        const selectAllCheckbox = document.getElementById('selectAllTasks');
+        const selectAllTableCheckbox = document.getElementById('selectAllTable');
+        
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('.task-selector');
+                const isChecked = this.checked;
+                
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = isChecked;
+                    const taskId = checkbox.getAttribute('data-task-id');
+                    if (isChecked) {
+                        selectedTasks.add(taskId);
+                    } else {
+                        selectedTasks.delete(taskId);
+                    }
+                });
+                
+                if (selectAllTableCheckbox) {
+                    selectAllTableCheckbox.checked = isChecked;
+                }
+                
+                updateSelectionStats();
+            });
+        }
+        
+        // Table select all
+        if (selectAllTableCheckbox) {
+            selectAllTableCheckbox.addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('.task-selector');
+                const isChecked = this.checked;
+                
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = isChecked;
+                    const taskId = checkbox.getAttribute('data-task-id');
+                    if (isChecked) {
+                        selectedTasks.add(taskId);
+                    } else {
+                        selectedTasks.delete(taskId);
+                    }
+                });
+                
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = isChecked;
+                }
+                
+                updateSelectionStats();
+            });
+        }
+        
+        // Individual task selection
+        document.querySelectorAll('.task-selector').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const taskId = this.getAttribute('data-task-id');
+                
+                if (this.checked) {
+                    selectedTasks.add(taskId);
+                } else {
+                    selectedTasks.delete(taskId);
+                }
+                
+                // Update select all checkbox state
+                const allCheckboxes = document.querySelectorAll('.task-selector');
+                const allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
+                const anyChecked = Array.from(allCheckboxes).some(cb => cb.checked);
+                
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = allChecked;
+                    selectAllCheckbox.indeterminate = anyChecked && !allChecked;
+                }
+                
+                if (selectAllTableCheckbox) {
+                    selectAllTableCheckbox.checked = allChecked;
+                    selectAllTableCheckbox.indeterminate = anyChecked && !allChecked;
+                }
+                
+                updateSelectionStats();
+            });
+        });
+        
+        // Clear selection
+        document.getElementById('clearSelection').addEventListener('click', function() {
+            selectedTasks.clear();
+            document.querySelectorAll('.task-selector').forEach(cb => cb.checked = false);
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            }
+            if (selectAllTableCheckbox) {
+                selectAllTableCheckbox.checked = false;
+                selectAllTableCheckbox.indeterminate = false;
+            }
+            updateSelectionStats();
+        });
+        
+        // Apply filters
+        document.getElementById('applyFilters').addEventListener('click', function() {
+            const status = document.getElementById('filterStatus').value;
+            const priority = document.getElementById('filterPriority').value;
+            const department = document.getElementById('filterDepartment').value;
+            const dateRange = document.getElementById('filterDate').value;
+            
+            // Build query parameters
+            const params = new URLSearchParams();
+            if (status) params.append('status', status);
+            if (priority) params.append('priority', priority);
+            if (department) params.append('department', department);
+            if (dateRange) params.append('date_range', dateRange);
+            
+            // Preserve page number
+            const currentPage = new URLSearchParams(window.location.search).get('page');
+            if (currentPage) params.append('page', currentPage);
+            
+            // Reload page with filters
+            window.location.href = `${window.location.pathname}?${params.toString()}`;
+        });
+        
+        // Clear filters
+        document.getElementById('clearFilters').addEventListener('click', function() {
+            window.location.href = window.location.pathname;
+        });
+        
+        // Delete confirmation
+        const confirmDeleteCheckbox = document.getElementById('confirmDeleteCheckbox');
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        
+        if (confirmDeleteCheckbox && confirmDeleteBtn) {
+            confirmDeleteCheckbox.addEventListener('change', function() {
+                confirmDeleteBtn.disabled = !this.checked;
+            });
+            
+            confirmDeleteBtn.addEventListener('click', function() {
+                if (selectedTasks.size === 0) {
+                    alert('Please select tasks to delete');
+                    return;
+                }
+                
+                // Show processing
+                this.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Deleting...';
+                this.disabled = true;
+                
+                // Submit the form
+                document.getElementById('deleteForm').submit();
+            });
+        }
+        
+        // Export functionality
+        const exportBtn = document.getElementById('exportBtn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', function() {
+                const format = document.getElementById('exportFormat').value;
+                const selectedOnly = document.getElementById('exportSelectedOnly').checked;
+                
+                let url = `/reports/export/tasks?format=${format}`;
+                if (selectedOnly && selectedTasks.size > 0) {
+                    url += `&task_ids=${Array.from(selectedTasks).join(',')}`;
+                }
+                
+                window.open(url, '_blank');
+                const exportModal = bootstrap.Modal.getInstance(document.getElementById('exportModal'));
+                if (exportModal) exportModal.hide();
+            });
+        }
+        
+        // Form submission handlers
+        const bulkForms = document.querySelectorAll('#statusForm, #priorityForm, #assignForm');
+        bulkForms.forEach(form => {
+            form.addEventListener('submit', function(e) {
+                if (selectedTasks.size === 0) {
+                    e.preventDefault();
+                    alert('Please select at least one task');
+                    return false;
+                }
+                
+                const submitBtn = this.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing...';
+                    submitBtn.disabled = true;
+                }
+                
+                return true;
+            });
+        });
+        
+        // Import form handler
+        const importForm = document.getElementById('importForm');
+        if (importForm) {
+            importForm.addEventListener('submit', function(e) {
+                const submitBtn = this.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Importing...';
+                    submitBtn.disabled = true;
+                }
+            });
+        }
+        
+        // Initialize with any pre-selected tasks from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const preSelected = urlParams.get('selected');
+        if (preSelected) {
+            preSelected.split(',').forEach(id => {
+                selectedTasks.add(id);
+                const checkbox = document.querySelector(`.task-selector[data-task-id="${id}"]`);
+                if (checkbox) checkbox.checked = true;
+            });
+            updateSelectionStats();
+        }
+        
+        // Add row click handler for better UX
+        document.querySelectorAll('tr.task-item').forEach(row => {
+            row.addEventListener('click', function(e) {
+                // Don't trigger if clicking on a link, button, or checkbox
+                if (e.target.tagName === 'A' || e.target.tagName === 'BUTTON' || 
+                    e.target.type === 'checkbox' || e.target.closest('a') || e.target.closest('button')) {
+                    return;
+                }
+                
+                // Find the checkbox in this row
+                const checkbox = this.querySelector('.task-selector');
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event('change'));
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

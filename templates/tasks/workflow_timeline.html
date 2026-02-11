@@ -1,0 +1,570 @@
+<!-- templates/tasks/workflow_timeline.html -->
+{% extends "base.html" %}
+
+{% block title %}Task Workflow - {{ task.title }} - {{ app_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .timeline {
+        position: relative;
+        padding: 20px 0;
+    }
+    
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 30px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background-color: #e9ecef;
+    }
+    
+    .timeline-item {
+        position: relative;
+        margin-bottom: 30px;
+        padding-left: 60px;
+    }
+    
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: 22px;
+        top: 0;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 3px solid #fff;
+        z-index: 1;
+    }
+    
+    .timeline-item.created::before {
+        background-color: #28a745;
+        box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2);
+    }
+    
+    .timeline-item.assigned::before {
+        background-color: #007bff;
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
+    }
+    
+    .timeline-item.status-changed::before {
+        background-color: #ffc107;
+        box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.2);
+    }
+    
+    .timeline-item.updated::before {
+        background-color: #6c757d;
+        box-shadow: 0 0 0 3px rgba(108, 117, 125, 0.2);
+    }
+    
+    .timeline-item.closed::before {
+        background-color: #dc3545;
+        box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.2);
+    }
+    
+    .timeline-item.commented::before {
+        background-color: #17a2b8;
+        box-shadow: 0 0 0 3px rgba(23, 162, 184, 0.2);
+    }
+    
+    .timeline-card {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border-left: 4px solid;
+    }
+    
+    .timeline-card.created {
+        border-left-color: #28a745;
+    }
+    
+    .timeline-card.assigned {
+        border-left-color: #007bff;
+    }
+    
+    .timeline-card.status-changed {
+        border-left-color: #ffc107;
+    }
+    
+    .timeline-card.updated {
+        border-left-color: #6c757d;
+    }
+    
+    .timeline-card.closed {
+        border-left-color: #dc3545;
+    }
+    
+    .timeline-card.commented {
+        border-left-color: #17a2b8;
+    }
+    
+    .timeline-time {
+        font-size: 0.85rem;
+        color: #6c757d;
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+    }
+    
+    .timeline-time i {
+        margin-right: 5px;
+    }
+    
+    .timeline-user {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    
+    .timeline-user-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background-color: #007bff;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 10px;
+        font-weight: bold;
+    }
+    
+    .timeline-user-info {
+        flex: 1;
+    }
+    
+    .timeline-user-name {
+        font-weight: 600;
+    }
+    
+    .timeline-user-role {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    
+    .timeline-content {
+        margin-top: 10px;
+    }
+    
+    .timeline-action {
+        font-weight: 600;
+        color: #343a40;
+        margin-bottom: 5px;
+    }
+    
+    .timeline-description {
+        color: #495057;
+        margin-bottom: 10px;
+    }
+    
+    .field-change {
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        padding: 8px;
+        margin-top: 5px;
+        font-size: 0.9rem;
+    }
+    
+    .old-value {
+        color: #dc3545;
+        text-decoration: line-through;
+        margin-right: 5px;
+    }
+    
+    .new-value {
+        color: #28a745;
+        font-weight: 500;
+    }
+    
+    .workflow-summary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 30px;
+    }
+    
+    .workflow-stats {
+        display: flex;
+        justify-content: space-around;
+        text-align: center;
+        margin-top: 20px;
+    }
+    
+    .stat-item {
+        padding: 10px;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    .duration-item {
+        background: rgba(255,255,255,0.1);
+        border-radius: 6px;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-2 text-gray-800">
+                <i class="bi bi-diagram-3 me-2"></i> Task Workflow Timeline
+            </h1>
+            <p class="mb-0">
+                Complete history of task #{{ task.id[:8] }}: {{ task.title }}
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('task.task_list') }}?view={{ task.id }}" class="btn btn-outline-primary me-2">
+                <i class="bi bi-eye me-1"></i> View Task
+            </a>
+            <a href="{{ url_for('task.task_list') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Back to Tasks
+            </a>
+        </div>
+    </div>
+
+    <!-- Workflow Summary Card -->
+    <div class="workflow-summary">
+        <div class="row">
+            <div class="col-md-8">
+                <h4 class="fw-bold mb-3">Workflow Summary</h4>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="duration-item">
+                            <small>Created</small>
+                            <div class="fw-bold">{{ task.created_at.strftime('%B %d, %Y %I:%M %p') if task.created_at else 'N/A' }}</div>
+                        </div>
+                        {% if task.assigned_user %}
+                        <div class="duration-item">
+                            <small>Assigned To</small>
+                            <div class="fw-bold">{{ task.assigned_user.full_name }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        {% if task.completed_at %}
+                        <div class="duration-item">
+                            <small>Completed</small>
+                            <div class="fw-bold">{{ task.completed_at.strftime('%B %d, %Y %I:%M %p') }}</div>
+                        </div>
+                        <div class="duration-item">
+                            <small>Time to Complete</small>
+                            <div class="fw-bold">
+                                {% if task.created_at and task.completed_at %}
+                                    {{ (task.completed_at - task.created_at).days }} days
+                                    {{ ((task.completed_at - task.created_at).seconds // 3600) }} hours
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="workflow-stats">
+                    <div class="stat-item">
+                        <div class="stat-value">{{ history|length }}</div>
+                        <div class="stat-label">Total Actions</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ history|selectattr('action', 'equalto', 'Status Changed')|list|length }}</div>
+                        <div class="stat-label">Status Changes</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ history|selectattr('action', 'equalto', 'Task Assigned')|list|length }}</div>
+                        <div class="stat-label">Assignments</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Timeline -->
+    <div class="card shadow">
+        <div class="card-header py-3">
+            <h6 class="m-0 fw-bold text-primary">
+                <i class="bi bi-clock-history me-1"></i> Complete Workflow Timeline
+                <span class="badge bg-secondary ms-2">{{ history|length }} events</span>
+            </h6>
+        </div>
+        <div class="card-body">
+            {% if history %}
+            <div class="timeline">
+                {% for event in history %}
+                {% set event_class = event.action.lower().replace(' ', '-') %}
+                <div class="timeline-item {{ event_class }}">
+                    <div class="timeline-card {{ event_class }}">
+                        <div class="timeline-time">
+                            <i class="bi bi-clock"></i>
+                            {{ event.timestamp.strftime('%B %d, %Y at %I:%M %p') }}
+                            {% if loop.first %}
+                            <span class="badge bg-success ms-2">Start</span>
+                            {% endif %}
+                            {% if loop.last and task.status == 'Resolved' %}
+                            <span class="badge bg-danger ms-2">Completed</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="timeline-user">
+                            <div class="timeline-user-avatar">
+                                {{ event.user.first_name[:1] if event.user else '?' }}
+                            </div>
+                            <div class="timeline-user-info">
+                                <div class="timeline-user-name">
+                                    {{ event.user.full_name if event.user else 'Unknown User' }}
+                                </div>
+                                <div class="timeline-user-role">
+                                    {{ event.user.role if event.user else 'Unknown' }}
+                                    {% if event.user and event.user.department %}
+                                    • {{ event.user.department }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="timeline-content">
+                            <div class="timeline-action">
+                                {% if event.action == 'Task Created' %}
+                                <i class="bi bi-plus-circle text-success me-1"></i>
+                                {% elif event.action == 'Task Assigned' %}
+                                <i class="bi bi-person-check text-primary me-1"></i>
+                                {% elif event.action == 'Status Changed' %}
+                                <i class="bi bi-arrow-repeat text-warning me-1"></i>
+                                {% elif event.action == 'Task Closed' %}
+                                <i class="bi bi-check-circle text-danger me-1"></i>
+                                {% elif event.action == 'Comment Added' %}
+                                <i class="bi bi-chat-left-text text-info me-1"></i>
+                                {% else %}
+                                <i class="bi bi-pencil-square text-secondary me-1"></i>
+                                {% endif %}
+                                {{ event.action }}
+                            </div>
+                            
+                            {% if event.description %}
+                            <div class="timeline-description">
+                                {{ event.description }}
+                            </div>
+                            {% endif %}
+                            
+                            {% if event.field_changed and event.old_value and event.new_value %}
+                            <div class="field-change">
+                                <strong>{{ event.field_changed|replace('_', ' ')|title }}:</strong>
+                                <span class="old-value">{{ event.old_value }}</span>
+                                <i class="bi bi-arrow-right text-muted mx-1"></i>
+                                <span class="new-value">{{ event.new_value }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <!-- Current Status -->
+                <div class="timeline-item current">
+                    <div class="timeline-card" style="border-left-color: #343a40;">
+                        <div class="timeline-time">
+                            <i class="bi bi-info-circle"></i> Current Status
+                        </div>
+                        <div class="timeline-content">
+                            <div class="timeline-action">
+                                <i class="bi bi-flag me-1"></i> Task Status: {{ task.status }}
+                            </div>
+                            <div class="timeline-description">
+                                {% if task.status == 'Resolved' %}
+                                <strong>Completed by:</strong> 
+                                {% if task.closed_by_user %}
+                                {{ task.closed_by_user.full_name }} on {{ task.completed_at.strftime('%B %d, %Y') }}
+                                {% else %}
+                                Unknown
+                                {% endif %}
+                                
+                                {% if task.resolution_summary %}
+                                <div class="mt-2">
+                                    <strong>Resolution Summary:</strong>
+                                    <p class="mt-1">{{ task.resolution_summary }}</p>
+                                </div>
+                                {% endif %}
+                                
+                            {% elif task.status == 'In Progress' %}
+                                <strong>Progress:</strong> {{ task.progress }}%
+                                {% if task.assigned_user %}
+                                <br><strong>Assigned to:</strong> {{ task.assigned_user.full_name }}
+                                {% endif %}
+                                
+                            {% elif task.status == 'Assigned' %}
+                                <strong>Assigned to:</strong> 
+                                {% if task.assigned_user %}
+                                {{ task.assigned_user.full_name }}
+                                {% else %}
+                                Unassigned
+                                {% endif %}
+                                
+                            {% else %}
+                                Task is currently {{ task.status|lower }}.
+                            {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-clock-history fs-1 text-muted mb-3"></i>
+                <h4 class="text-muted">No Workflow History</h4>
+                <p class="text-muted">This task doesn't have any recorded history yet.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Workflow Statistics -->
+    <div class="row mt-4">
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 fw-bold text-primary">
+                        <i class="bi bi-bar-chart me-1"></i> Activity Breakdown
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if history %}
+                    {% set actions = ['Task Created', 'Task Assigned', 'Status Changed', 'Task Updated', 'Task Closed', 'Comment Added'] %}
+                    {% for action in actions %}
+                    {% set count = history|selectattr('action', 'equalto', action)|list|length %}
+                    {% if count > 0 %}
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>{{ action }}</span>
+                        <span class="badge bg-primary">{{ count }}</span>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                    {% else %}
+                    <p class="text-muted text-center py-3">No activity data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 fw-bold text-primary">
+                        <i class="bi bi-people me-1"></i> Involved Users
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if history %}
+                    {% set users = [] %}
+                    {% for event in history %}
+                    {% if event.user and event.user.id not in users|map(attribute='id') %}
+                    {% set users = users + [event.user] %}
+                    {% endif %}
+                    {% endfor %}
+                    
+                    {% for user in users %}
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="avatar-sm me-3 bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" 
+                             style="width: 40px; height: 40px;">
+                            {{ user.first_name[:1] }}{{ user.last_name[:1] }}
+                        </div>
+                        <div>
+                            <div class="fw-bold">{{ user.full_name }}</div>
+                            <small class="text-muted">{{ user.role }} • {{ user.department }}</small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p class="text-muted text-center py-3">No user activity data</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 fw-bold text-primary">
+                        <i class="bi bi-calendar-check me-1"></i> Timeline Summary
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if history and history|length >= 2 %}
+                    {% set first_event = history|last %}
+                    {% set last_event = history|first %}
+                    
+                    <div class="mb-3">
+                        <small class="text-muted">Workflow Duration</small>
+                        <div class="fw-bold">
+                            {% set duration = (last_event.timestamp - first_event.timestamp) %}
+                            {{ duration.days }} days, {{ (duration.seconds // 3600) }} hours
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <small class="text-muted">First Action</small>
+                        <div class="fw-bold">{{ first_event.timestamp.strftime('%b %d, %Y') }}</div>
+                        <div class="text-muted small">{{ first_event.action }}</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <small class="text-muted">Latest Action</small>
+                        <div class="fw-bold">{{ last_event.timestamp.strftime('%b %d, %Y') }}</div>
+                        <div class="text-muted small">{{ last_event.action }}</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <small class="text-muted">Average Time Between Actions</small>
+                        <div class="fw-bold">
+                            {% set avg_seconds = ((last_event.timestamp - first_event.timestamp).total_seconds() / (history|length - 1)) if history|length > 1 else 0 %}
+                            {{ (avg_seconds // 86400)|int }} days, {{ ((avg_seconds % 86400) // 3600)|int }} hours
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center py-3">Insufficient timeline data</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add smooth scrolling to timeline
+    const timelineItems = document.querySelectorAll('.timeline-item');
+    timelineItems.forEach(item => {
+        item.addEventListener('click', function() {
+            this.querySelector('.timeline-card').style.transform = 'scale(1.02)';
+            setTimeout(() => {
+                this.querySelector('.timeline-card').style.transform = 'scale(1)';
+            }, 300);
+        });
+    });
+    
+    // Print workflow timeline
+    document.getElementById('printTimeline')?.addEventListener('click', function() {
+        window.print();
+    });
+});
+</script>
+{% endblock %}

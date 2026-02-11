@@ -1,0 +1,806 @@
+<!-- templates/dashboard.html - FIXED WITH ALL WORKING LINKS -->
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ app_name }}{% endblock %}
+
+{% block page_title %}Dashboard{% endblock %}
+
+{% block page_description %}Welcome back, {{ current_user.first_name }}! Here's your task overview.{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        height: 100%;
+        border: none;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.15) !important;
+    }
+    
+    .stat-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+    }
+    
+    .quick-action-btn {
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255,255,255,0.1);
+        height: 120px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .quick-action-btn:hover {
+        transform: scale(1.05);
+        border-color: var(--bs-primary);
+    }
+    
+    .disabled-btn {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .welcome-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+    }
+    
+    .system-info-card {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        border: none;
+    }
+    
+    .urgent-alert {
+        animation: pulse 2s infinite;
+        border: none;
+    }
+    
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Welcome Header -->
+    <div class="card welcome-card shadow mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h2 class="mb-2">Welcome back, <strong>{{ current_user.first_name }}!</strong></h2>
+                    <p class="mb-1">
+                        <i class="bi bi-person-badge me-1"></i>
+                        <span class="badge {{ 'admin-badge' if current_user.role == 'Admin' else 'supervisor-badge' if current_user.role == 'Supervisor' else 'technician-badge' }}">
+                            {{ current_user.role }}
+                        </span>
+                        {% if current_user.department %}
+                        <span class="badge bg-light text-dark ms-2">{{ current_user.department }}</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="btn-group">
+                        <button class="btn btn-light me-2" onclick="refreshStats()" id="refreshBtn">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                        
+                        <!-- New Task button - only for Admins and Supervisors -->
+                        {% if current_user.role in ['Admin', 'Supervisor'] %}
+                        <a href="{{ url_for('create_task_standalone') if endpoint_exists('create_task_standalone') else '/tasks/create' }}" class="btn btn-light">
+                            <i class="bi bi-plus-circle me-1"></i> New Task
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Role Information -->
+    <div class="alert alert-{{ 'danger' if current_user.role == 'Admin' else 'warning' if current_user.role == 'Supervisor' else 'info' }} mb-4" role="alert">
+        <div class="d-flex">
+            <div class="flex-shrink-0">
+                <i class="bi bi-{{ 'shield-fill' if current_user.role == 'Admin' else 'person-badge' if current_user.role == 'Supervisor' else 'person' }} fs-4"></i>
+            </div>
+            <div class="flex-grow-1 ms-3">
+                <h5 class="alert-heading">
+                    {{ 'Administrator Access' if current_user.role == 'Admin' else 'Supervisor Access' if current_user.role == 'Supervisor' else 'User Access' }}
+                </h5>
+                <p class="mb-0">
+                    {% if current_user.role == 'Admin' %}
+                        You have full system access. You can view and manage <strong>all tasks across all departments</strong>. 
+                        Only you can close tasks and manage workflow templates.
+                    {% elif current_user.role == 'Supervisor' %}
+                        You can view and manage tasks in the <strong>{{ current_user.department }}</strong> department. 
+                        You can create new tasks but cannot close them.
+                    {% else %}
+                        You can only view and manage tasks assigned to you. 
+                        You cannot create new tasks or close existing tasks.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stat-card border-start border-primary border-4">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs fw-bold text-primary text-uppercase mb-1">
+                                {% if current_user.role == 'Admin' %}
+                                    All Tasks
+                                {% elif current_user.role == 'Supervisor' %}
+                                    Department Tasks
+                                {% else %}
+                                    My Tasks
+                                {% endif %}
+                            </div>
+                            <div class="h5 mb-0 fw-bold">{{ total_tasks }}</div>
+                            <div class="text-xs text-muted mt-1">
+                                {% if current_user.role == 'Admin' %}
+                                    Across all departments
+                                {% elif current_user.role == 'Supervisor' %}
+                                    In {{ current_user.department }}
+                                {% else %}
+                                    Assigned to you
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="stat-icon bg-primary bg-opacity-10 text-primary">
+                                <i class="bi bi-list-task"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stat-card border-start border-success border-4">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs fw-bold text-success text-uppercase mb-1">
+                                My Tasks
+                            </div>
+                            <div class="h5 mb-0 fw-bold">{{ my_tasks }}</div>
+                            <div class="text-xs text-muted mt-1">
+                                Tasks assigned to you
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="stat-icon bg-success bg-opacity-10 text-success">
+                                <i class="bi bi-person-check"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stat-card border-start border-warning border-4">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs fw-bold text-warning text-uppercase mb-1">
+                                Open Tasks
+                            </div>
+                            <div class="h5 mb-0 fw-bold">{{ open_tasks }}</div>
+                            <div class="text-xs text-muted mt-1">
+                                New, Assigned, or In Progress
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="stat-icon bg-warning bg-opacity-10 text-warning">
+                                <i class="bi bi-hourglass-split"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stat-card border-start border-danger border-4">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs fw-bold text-danger text-uppercase mb-1">
+                                Overdue Tasks
+                            </div>
+                            <div class="h5 mb-0 fw-bold">{{ overdue_tasks }}</div>
+                            <div class="text-xs text-muted mt-1">
+                                Past due date
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="stat-icon bg-danger bg-opacity-10 text-danger">
+                                <i class="bi bi-exclamation-triangle"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-lg-12">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-lightning me-1"></i> Quick Actions
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <!-- My Tasks - ALWAYS SHOW -->
+                        <div class="col-md-3 col-6">
+                            <a href="{{ url_for('my_tasks_redirect') }}" 
+                               class="btn btn-outline-primary quick-action-btn">
+                                <i class="bi bi-inbox-fill fs-2 mb-2"></i>
+                                <div class="mt-2">My Tasks</div>
+                            </a>
+                        </div>
+                        
+                        <!-- All Tasks - ONLY FOR ADMINS AND SUPERVISORS -->
+                        {% if current_user.role in ['Admin', 'Supervisor'] %}
+                        <div class="col-md-3 col-6">
+                            {% if current_user.role == 'Admin' %}
+                            <!-- Admin: See all tasks across all departments -->
+                            <a href="{{ url_for('admin_bulk_operations') if endpoint_exists('admin_bulk_operations') else '/tasks' }}" 
+                               class="btn btn-outline-success quick-action-btn">
+                                <i class="bi bi-list-task fs-2 mb-2"></i>
+                                <div class="mt-2">All Tasks</div>
+                                <small class="text-muted">All Departments</small>
+                            </a>
+                            {% elif current_user.role == 'Supervisor' %}
+                            <!-- Supervisor: See tasks only in their department -->
+                            <a href="/tasks?department={{ current_user.department }}" 
+                               class="btn btn-outline-success quick-action-btn">
+                                <i class="bi bi-list-task fs-2 mb-2"></i>
+                                <div class="mt-2">All Tasks</div>
+                                <small class="text-muted">{{ current_user.department }}</small>
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <!-- For Technicians: Show In Progress tasks instead -->
+                        <div class="col-md-3 col-6">
+                            <a href="/tasks?status=In+Progress" 
+                               class="btn btn-outline-success quick-action-btn">
+                                <i class="bi bi-hourglass-split fs-2 mb-2"></i>
+                                <div class="mt-2">In Progress</div>
+                            </a>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Unassigned Tasks - ONLY FOR ADMINS AND SUPERVISORS -->
+                        {% if current_user.role in ['Admin', 'Supervisor'] %}
+                        <div class="col-md-3 col-6">
+                            {% if current_user.role == 'Admin' %}
+                            <a href="/tasks?assigned_to=unassigned" 
+                               class="btn btn-outline-warning quick-action-btn">
+                                <i class="bi bi-question-circle fs-2 mb-2"></i>
+                                <div class="mt-2">Unassigned</div>
+                            </a>
+                            {% else %}
+                            <a href="/tasks?department={{ current_user.department }}&assigned_to=unassigned" 
+                               class="btn btn-outline-warning quick-action-btn">
+                                <i class="bi bi-question-circle fs-2 mb-2"></i>
+                                <div class="mt-2">Unassigned</div>
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <!-- For Technicians: Show something else -->
+                        <div class="col-md-3 col-6">
+                            <a href="/tasks?status=Resolved" 
+                               class="btn btn-outline-warning quick-action-btn">
+                                <i class="bi bi-check-circle fs-2 mb-2"></i>
+                                <div class="mt-2">Completed</div>
+                            </a>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Role-specific action -->
+                        {% if current_user.role == 'Admin' %}
+                        <!-- Admin: Workflow Templates -->
+                        <div class="col-md-3 col-6">
+                            <a href="{{ url_for('workflow_templates') if endpoint_exists('workflow_templates') else '#' }}" 
+                               class="btn btn-outline-info quick-action-btn">
+                                <i class="bi bi-diagram-3 fs-2 mb-2"></i>
+                                <div class="mt-2">Workflows</div>
+                            </a>
+                        </div>
+                        {% elif current_user.role == 'Supervisor' %}
+                        <!-- Supervisor: Team Tasks -->
+                        <div class="col-md-3 col-6">
+                            <a href="/tasks?department={{ current_user.department }}" 
+                               class="btn btn-outline-info quick-action-btn">
+                                <i class="bi bi-people fs-2 mb-2"></i>
+                                <div class="mt-2">Team Tasks</div>
+                            </a>
+                        </div>
+                        {% else %}
+                        <!-- Technician: Task Request (disabled) -->
+                        <div class="col-md-3 col-6">
+                            <button class="btn btn-outline-secondary quick-action-btn disabled-btn"
+                                    disabled
+                                    data-bs-toggle="tooltip" 
+                                    data-bs-placement="top"
+                                    title="Contact your supervisor for new tasks">
+                                <i class="bi bi-envelope-plus fs-2 mb-2"></i>
+                                <div class="mt-2">Request Task</div>
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="row">
+        <!-- Recent Tasks -->
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-clock-history me-1"></i> Recent Tasks
+                    </h6>
+                    <div>
+                        {% if current_user.role == 'Admin' %}
+                        <a href="{{ url_for('admin_bulk_operations') if endpoint_exists('admin_bulk_operations') else '/tasks' }}" class="btn btn-sm btn-outline-primary">
+                            View All <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
+                        {% elif current_user.role == 'Supervisor' %}
+                        <a href="/tasks?department={{ current_user.department }}" class="btn btn-sm btn-outline-primary">
+                            View All <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
+                        {% else %}
+                        <a href="{{ url_for('my_tasks_redirect') }}" class="btn btn-sm btn-outline-primary">
+                            View All <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if recent_tasks %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Task ID</th>
+                                    <th>Title</th>
+                                    <th>Status</th>
+                                    <th>Priority</th>
+                                    <th>Due Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in recent_tasks %}
+                                <!-- FIXED: Use is_overdue_check helper function instead of direct comparison -->
+                                {% set is_overdue = is_overdue_check(task.due_date, task.status) %}
+                                <tr class="{{ 'overdue-task' if is_overdue else '' }}">
+                                    <td>
+                                        <small class="text-muted">#{{ task.id[:8] if task.id else 'N/A' }}</small>
+                                    </td>
+                                    <td>
+                                        <strong>{{ task.title|truncate(30) if task.title else 'Untitled' }}</strong>
+                                        {% if task.category %}
+                                        <br><small class="text-muted">{{ task.category }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if task.status == 'New' %}
+                                        <span class="badge bg-secondary">New</span>
+                                        {% elif task.status == 'Assigned' %}
+                                        <span class="badge bg-info">Assigned</span>
+                                        {% elif task.status == 'In Progress' %}
+                                        <span class="badge bg-primary">In Progress</span>
+                                        {% elif task.status == 'Resolved' %}
+                                        <span class="badge bg-success">Resolved</span>
+                                        {% elif task.status == 'Closed' %}
+                                        <span class="badge bg-dark">Closed</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ task.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if task.priority == 'Critical' %}
+                                        <span class="badge bg-danger">Critical</span>
+                                        {% elif task.priority == 'High' %}
+                                        <span class="badge bg-warning">High</span>
+                                        {% elif task.priority == 'Medium' %}
+                                        <span class="badge bg-info">Medium</span>
+                                        {% elif task.priority == 'Low' %}
+                                        <span class="badge bg-success">Low</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ task.priority }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if task.due_date %}
+                                            {% if is_overdue %}
+                                            <span class="text-danger">
+                                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                                {{ task.due_date.strftime('%m/%d/%Y') }}
+                                            </span>
+                                            {% else %}
+                                            {{ task.due_date.strftime('%m/%d/%Y') }}
+                                            {% endif %}
+                                        {% else %}
+                                        <span class="text-muted">Not set</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="/tasks/{{ task.id }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-list-task fs-1 text-muted mb-3"></i>
+                        <h5 class="text-muted">No recent tasks found</h5>
+                        <p class="text-muted mb-3">
+                            {% if current_user.role == 'Admin' %}
+                                No tasks in the system yet.
+                            {% elif current_user.role == 'Supervisor' %}
+                                No tasks in the {{ current_user.department }} department.
+                            {% else %}
+                                You don't have any tasks assigned yet.
+                            {% endif %}
+                        </p>
+                        {% if current_user.role in ['Admin', 'Supervisor'] %}
+                        <a href="{{ url_for('create_task_standalone') if endpoint_exists('create_task_standalone') else '/tasks/create' }}" class="btn btn-primary">
+                            <i class="bi bi-plus me-1"></i> Create First Task
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Task Statistics -->
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-pie-chart me-1"></i> Task Statistics
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <!-- Priority Breakdown -->
+                    <h6 class="fw-bold mb-3">Priority Distribution</h6>
+                    <div class="mb-4">
+                        {% if priority_counts is defined %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Critical</span>
+                            <span class="badge bg-danger">{{ priority_counts.Critical }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>High</span>
+                            <span class="badge bg-warning">{{ priority_counts.High }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Medium</span>
+                            <span class="badge bg-info">{{ priority_counts.Medium }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Low</span>
+                            <span class="badge bg-success">{{ priority_counts.Low }}</span>
+                        </div>
+                        {% else %}
+                        <!-- Calculate from recent tasks if priority_counts not available -->
+                        {% set priority_counts = {'Critical': 0, 'High': 0, 'Medium': 0, 'Low': 0} %}
+                        {% for task in recent_tasks %}
+                            {% if task.priority in priority_counts %}
+                                {% set _ = priority_counts.update({task.priority: priority_counts[task.priority] + 1}) %}
+                            {% endif %}
+                        {% endfor %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Critical</span>
+                            <span class="badge bg-danger">{{ priority_counts.Critical }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>High</span>
+                            <span class="badge bg-warning">{{ priority_counts.High }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Medium</span>
+                            <span class="badge bg-info">{{ priority_counts.Medium }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Low</span>
+                            <span class="badge bg-success">{{ priority_counts.Low }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Status Breakdown -->
+                    <h6 class="fw-bold mb-3">Status Overview</h6>
+                    <div>
+                        {% if status_counts is defined %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>New</span>
+                            <span class="badge bg-secondary">{{ status_counts.New }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Assigned</span>
+                            <span class="badge bg-info">{{ status_counts.Assigned }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>In Progress</span>
+                            <span class="badge bg-primary">{{ status_counts['In Progress'] }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Resolved</span>
+                            <span class="badge bg-success">{{ status_counts.Resolved }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Closed</span>
+                            <span class="badge bg-dark">{{ status_counts.Closed }}</span>
+                        </div>
+                        {% else %}
+                        <!-- Calculate from recent tasks if status_counts not available -->
+                        {% set status_counts = {'New': 0, 'Assigned': 0, 'In Progress': 0, 'Resolved': 0, 'Closed': 0} %}
+                        {% for task in recent_tasks %}
+                            {% if task.status in status_counts %}
+                                {% set _ = status_counts.update({task.status: status_counts[task.status] + 1}) %}
+                            {% endif %}
+                        {% endfor %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>New</span>
+                            <span class="badge bg-secondary">{{ status_counts.New }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Assigned</span>
+                            <span class="badge bg-info">{{ status_counts.Assigned }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>In Progress</span>
+                            <span class="badge bg-primary">{{ status_counts['In Progress'] }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Resolved</span>
+                            <span class="badge bg-success">{{ status_counts.Resolved }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Closed</span>
+                            <span class="badge bg-dark">{{ status_counts.Closed }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =============================================== -->
+    <!-- ADMIN ONLY SECTION - COMPLETELY HIDDEN FOR NON-ADMINS -->
+    <!-- =============================================== -->
+    {% if current_user.role == 'Admin' %}
+    <!-- System Administration Dashboard -->
+    <div class="row mt-4">
+        <div class="col-lg-12">
+            <div class="card system-info-card shadow">
+                <div class="card-body">
+                    <h5 class="card-title text-white mb-4">
+                        <i class="bi bi-shield-check me-2"></i>System Administration
+                    </h5>
+                    <div class="row">
+                        <div class="col-md-3 text-center mb-3">
+                            <div class="p-3 bg-white bg-opacity-10 rounded">
+                                <i class="bi bi-people fs-1 mb-2"></i>
+                                <h4 class="text-white mb-1">
+                                    {% if get_department_users is defined %}
+                                        {{ get_department_users()|length }}
+                                    {% else %}
+                                        0
+                                    {% endif %}
+                                </h4>
+                                <small class="text-white">Active Users</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-center mb-3">
+                            <div class="p-3 bg-white bg-opacity-10 rounded">
+                                <i class="bi bi-building fs-1 mb-2"></i>
+                                <h4 class="text-white mb-1">
+                                    <a href="{{ url_for('manage_departments') if endpoint_exists('manage_departments') else '#' }}" class="text-white text-decoration-none">
+                                        Departments
+                                    </a>
+                                </h4>
+                                <small class="text-white">Manage Departments</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-center mb-3">
+                            <div class="p-3 bg-white bg-opacity-10 rounded">
+                                <i class="bi bi-diagram-3 fs-1 mb-2"></i>
+                                <h4 class="text-white mb-1">
+                                    <a href="{{ url_for('workflow_templates') if endpoint_exists('workflow_templates') else '#' }}" class="text-white text-decoration-none">
+                                        Workflows
+                                    </a>
+                                </h4>
+                                <small class="text-white">Templates</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-center mb-3">
+                            <div class="p-3 bg-white bg-opacity-10 rounded">
+                                <i class="bi bi-gear fs-1 mb-2"></i>
+                                <h4 class="text-white mb-1">
+                                    <a href="{{ url_for('manage_users') if endpoint_exists('manage_users') else '#' }}" class="text-white text-decoration-none">
+                                        Users
+                                    </a>
+                                </h4>
+                                <small class="text-white">Manage Users</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Quick Actions -->
+    <div class="row mt-4">
+        <div class="col-lg-12">
+            <div class="card shadow border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-tools me-2"></i> Admin Quick Actions
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3 col-6">
+                            <a href="{{ url_for('review_tasks') if endpoint_exists('review_tasks') else '#' }}" 
+                               class="btn btn-outline-danger w-100 py-3">
+                                <i class="bi bi-pencil-square fs-2 mb-2 d-block"></i>
+                                Review Tasks
+                            </a>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <a href="{{ url_for('admin_bulk_operations') if endpoint_exists('admin_bulk_operations') else '#' }}" 
+                               class="btn btn-outline-warning w-100 py-3">
+                                <i class="bi bi-collection fs-2 mb-2 d-block"></i>
+                                Bulk Operations
+                            </a>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <a href="{{ url_for('workflow_templates') if endpoint_exists('workflow_templates') else '#' }}" 
+                               class="btn btn-outline-info w-100 py-3">
+                                <i class="bi bi-diagram-3 fs-2 mb-2 d-block"></i>
+                                Workflow Templates
+                            </a>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <a href="{{ url_for('manage_users') if endpoint_exists('manage_users') else '#' }}" 
+                               class="btn btn-outline-success w-100 py-3">
+                                <i class="bi bi-people fs-2 mb-2 d-block"></i>
+                                Manage Users
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <!-- =============================================== -->
+    <!-- END ADMIN ONLY SECTION -->
+    <!-- =============================================== -->
+
+    <!-- Performance Metrics (Shown to all users) -->
+    <div class="row mt-4">
+        <div class="col-lg-12">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h6 class="m-0 fw-bold">
+                        <i class="bi bi-speedometer2 me-1"></i> Performance Summary
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 text-center">
+                            <div class="p-3">
+                                <i class="bi bi-check-circle-fill fs-1 text-success mb-3"></i>
+                                <h3>{{ open_tasks }}</h3>
+                                <p class="text-muted mb-0">Active Tasks</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <div class="p-3">
+                                <i class="bi bi-clock-fill fs-1 text-warning mb-3"></i>
+                                <h3>{{ my_tasks }}</h3>
+                                <p class="text-muted mb-0">Your Tasks</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <div class="p-3">
+                                <i class="bi bi-flag-fill fs-1 text-danger mb-3"></i>
+                                <h3>{{ overdue_tasks }}</h3>
+                                <p class="text-muted mb-0">Requires Attention</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Add keyboard shortcut for refresh (Ctrl+R)
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+            e.preventDefault();
+            refreshStats();
+        }
+    });
+    
+    // Auto-refresh stats every 60 seconds
+    setInterval(refreshStats, 60000);
+});
+
+// Function to refresh dashboard stats
+function refreshStats() {
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (!refreshBtn) return;
+    
+    // Save original content
+    const originalHTML = refreshBtn.innerHTML;
+    const originalClass = refreshBtn.className;
+    
+    // Show loading state
+    refreshBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Refreshing...';
+    refreshBtn.className = originalClass.replace('btn-light', 'btn-secondary');
+    refreshBtn.disabled = true;
+    
+    // Reload page after short delay
+    setTimeout(() => {
+        window.location.reload();
+    }, 500);
+}
+</script>
+{% endblock %}

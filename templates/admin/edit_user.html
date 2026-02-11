@@ -1,0 +1,533 @@
+<!-- templates/admin/edit_user.html -->
+{% extends "base.html" %}
+
+{% block title %}Edit User - {{ user.full_name }} - {{ app_name }}{% endblock %}
+
+{% block page_title %}Edit User: {{ user.full_name }}{% endblock %}
+
+{% block page_description %}Update user information and permissions{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group">
+    <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back to Users
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-xl-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <!-- User Summary -->
+                    <div class="card bg-dark border-secondary mb-4">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-auto">
+                                    <div class="avatar-circle bg-primary bg-opacity-25 p-3 rounded-circle">
+                                        <i class="bi bi-person fs-3"></i>
+                                    </div>
+                                </div>
+                                <div class="col">
+                                    <h5 class="mb-1">{{ user.full_name }}</h5>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <span class="badge 
+                                            {% if user.role == 'Admin' %}bg-danger
+                                            {% elif user.role == 'Supervisor' %}bg-primary
+                                            {% else %}bg-secondary{% endif %}">
+                                            {{ user.role }}
+                                        </span>
+                                        {% if user.department %}
+                                        <span class="badge bg-info">{{ user.department }}</span>
+                                        {% endif %}
+                                        <span class="badge {% if user.is_active %}bg-success{% else %}bg-warning{% endif %}">
+                                            {% if user.is_active %}Active{% else %}Inactive{% endif %}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <small class="text-muted">Member since {{ user.created_at.strftime('%Y-%m-%d') }}</small>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">User ID:</small>
+                                    <code class="small">{{ user.id }}</code>
+                                </div>
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">Last Updated:</small>
+                                    <span class="small">
+                                        {% if user.updated_at %}
+                                            {{ user.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                                        {% else %}
+                                            Never
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="POST" action="{{ url_for('edit_user', user_id=user.id) }}" class="needs-validation" novalidate>
+                        <!-- Personal Information Section -->
+                        <div class="mb-4">
+                            <h5 class="card-title mb-3">
+                                <i class="bi bi-person-circle me-2"></i>Personal Information
+                            </h5>
+                            
+                            <div class="row g-3">
+                                <!-- First Name -->
+                                <div class="col-md-6">
+                                    <label for="first_name" class="form-label required">First Name</label>
+                                    <input type="text" 
+                                           class="form-control {% if errors and 'first_name' in errors %}is-invalid{% endif %}" 
+                                           id="first_name" 
+                                           name="first_name" 
+                                           value="{{ form_data.first_name if form_data.first_name else user.first_name }}"
+                                           required
+                                           autofocus>
+                                    <div class="invalid-feedback">
+                                        {{ errors.first_name if errors and 'first_name' in errors else 'Please provide a first name.' }}
+                                    </div>
+                                </div>
+                                
+                                <!-- Last Name -->
+                                <div class="col-md-6">
+                                    <label for="last_name" class="form-label required">Last Name</label>
+                                    <input type="text" 
+                                           class="form-control {% if errors and 'last_name' in errors %}is-invalid{% endif %}" 
+                                           id="last_name" 
+                                           name="last_name" 
+                                           value="{{ form_data.last_name if form_data.last_name else user.last_name }}"
+                                           required>
+                                    <div class="invalid-feedback">
+                                        {{ errors.last_name if errors and 'last_name' in errors else 'Please provide a last name.' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Account Information Section -->
+                        <div class="mb-4">
+                            <h5 class="card-title mb-3">
+                                <i class="bi bi-person-badge me-2"></i>Account Information
+                            </h5>
+                            
+                            <div class="row g-3">
+                                <!-- Email - Now Full Width -->
+                                <div class="col-md-12">
+                                    <label for="email" class="form-label required">Email Address</label>
+                                    <input type="email" 
+                                           class="form-control {% if errors and 'email' in errors %}is-invalid{% endif %}" 
+                                           id="email" 
+                                           name="email" 
+                                           value="{{ form_data.email if form_data.email else user.email }}"
+                                           required
+                                           placeholder="user@example.com">
+                                    <div class="invalid-feedback">
+                                        {{ errors.email if errors and 'email' in errors else 'Please provide a valid email address.' }}
+                                    </div>
+                                    <div class="form-text">
+                                        Email is used for login and notifications.
+                                    </div>
+                                </div>
+                                <!-- REMOVED USERNAME FIELD -->
+                            </div>
+                        </div>
+
+                        <!-- Password Reset Section -->
+                        <div class="mb-4">
+                            <h5 class="card-title mb-3">
+                                <i class="bi bi-shield-lock me-2"></i>Password Reset
+                            </h5>
+                            
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" 
+                                       type="checkbox" 
+                                       role="switch" 
+                                       id="reset_password" 
+                                       name="reset_password"
+                                       onchange="togglePasswordFields()">
+                                <label class="form-check-label" for="reset_password">
+                                    <strong>Reset Password</strong>
+                                </label>
+                                <div class="form-text">
+                                    Check this box to set a new password for the user.
+                                </div>
+                            </div>
+                            
+                            <div id="password-fields" class="row g-3" style="display: none;">
+                                <div class="col-md-6">
+                                    <label for="new_password" class="form-label required">New Password</label>
+                                    <input type="password" 
+                                           class="form-control {% if errors and 'new_password' in errors %}is-invalid{% endif %}" 
+                                           id="new_password" 
+                                           name="new_password" 
+                                           minlength="8">
+                                    <div class="invalid-feedback">
+                                        {{ errors.new_password if errors and 'new_password' in errors else 'Password must be at least 8 characters.' }}
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <label for="confirm_password" class="form-label required">Confirm Password</label>
+                                    <input type="password" 
+                                           class="form-control {% if errors and 'confirm_password' in errors %}is-invalid{% endif %}" 
+                                           id="confirm_password" 
+                                           name="confirm_password" 
+                                           minlength="8">
+                                    <div class="invalid-feedback">
+                                        {{ errors.confirm_password if errors and 'confirm_password' in errors else 'Passwords must match.' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Role and Department Section -->
+                        <div class="mb-4">
+                            <h5 class="card-title mb-3">
+                                <i class="bi bi-briefcase me-2"></i>Role & Department
+                            </h5>
+                            
+                            <div class="row g-3">
+                                <!-- Role -->
+                                <div class="col-md-6">
+                                    <label for="role" class="form-label required">User Role</label>
+                                    <select class="form-select" 
+                                            id="role" 
+                                            name="role" 
+                                            required
+                                            onchange="toggleDepartmentRequired()">
+                                        <option value="Technician" {% if (form_data.role if form_data.role else user.role) == 'Technician' %}selected{% endif %}>
+                                            Technician
+                                        </option>
+                                        <option value="Supervisor" {% if (form_data.role if form_data.role else user.role) == 'Supervisor' %}selected{% endif %}>
+                                            Supervisor
+                                        </option>
+                                        <option value="Admin" {% if (form_data.role if form_data.role else user.role) == 'Admin' %}selected{% endif %}>
+                                            Administrator
+                                        </option>
+                                    </select>
+                                    <div class="form-text">
+                                        <span id="role-description">
+                                            {% if user.role == 'Admin' %}
+                                            Admin: Full system access across all departments.
+                                            {% elif user.role == 'Supervisor' %}
+                                            Supervisor: Can manage tasks and users within their department.
+                                            {% else %}
+                                            Technician: Can view and update assigned tasks only.
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Department -->
+                                <div class="col-md-6">
+                                    <label for="department" class="form-label" id="department-label">
+                                        Department
+                                    </label>
+                                    <input type="text" 
+                                           class="form-control {% if errors and 'department' in errors %}is-invalid{% endif %}" 
+                                           id="department" 
+                                           name="department"
+                                           value="{{ form_data.department if form_data.department else user.department }}"
+                                           placeholder="e.g., IT Support, Sales, HR">
+                                    <div class="invalid-feedback">
+                                        {{ errors.department if errors and 'department' in errors else 'Department is required for non-admin users.' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Account Status -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" 
+                                       type="checkbox" 
+                                       role="switch" 
+                                       id="is_active" 
+                                       name="is_active" 
+                                       {% if (form_data.is_active if form_data.is_active else user.is_active) %}checked{% endif %}>
+                                <label class="form-check-label" for="is_active">
+                                    <strong>Active Account</strong>
+                                </label>
+                                <div class="form-text">
+                                    Inactive users cannot log in to the system.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Activity Information -->
+                        <div class="card bg-dark border-secondary mb-4">
+                            <div class="card-body">
+                                <h6 class="card-title mb-3">
+                                    <i class="bi bi-activity me-2"></i>Activity Information
+                                </h6>
+                                <div class="row">
+                                    <div class="col-md-6 mb-2">
+                                        <small class="text-muted">Last Login:</small><br>
+                                        <strong>
+                                            {% if user.last_login %}
+                                                {{ user.last_login.strftime('%Y-%m-%d %H:%M') }}
+                                            {% else %}
+                                                Never
+                                            {% endif %}
+                                        </strong>
+                                    </div>
+                                    <div class="col-md-6 mb-2">
+                                        <small class="text-muted">Login Count:</small><br>
+                                        <strong>{{ user.login_count or 0 }}</strong>
+                                    </div>
+                                    <div class="col-md-6 mb-2">
+                                        <small class="text-muted">Last Updated:</small><br>
+                                        <strong>
+                                            {% if user.updated_at %}
+                                                {{ user.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                                            {% else %}
+                                                Never
+                                            {% endif %}
+                                        </strong>
+                                    </div>
+                                    <div class="col-md-6 mb-2">
+                                        <small class="text-muted">Account Age:</small><br>
+                                        <strong>
+                                            {% set days = (now - user.created_at).days %}
+                                            {{ days }} day{% if days != 1 %}s{% endif %}
+                                        </strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Form Actions -->
+                        <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                            <div>
+                                <small class="text-muted">
+                                    <i class="bi bi-asterisk text-danger"></i> Required fields
+                                </small>
+                            </div>
+                            <div class="btn-group">
+                                <button type="reset" class="btn btn-outline-secondary">
+                                    <i class="bi bi-arrow-clockwise me-1"></i> Reset Changes
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-check-circle me-1"></i> Update User
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Toggle password fields
+        function togglePasswordFields() {
+            const resetPassword = document.getElementById('reset_password');
+            const passwordFields = document.getElementById('password-fields');
+            const newPassword = document.getElementById('new_password');
+            const confirmPassword = document.getElementById('confirm_password');
+            
+            if (resetPassword.checked) {
+                passwordFields.style.display = 'block';
+                newPassword.required = true;
+                confirmPassword.required = true;
+            } else {
+                passwordFields.style.display = 'none';
+                newPassword.required = false;
+                confirmPassword.required = false;
+                newPassword.value = '';
+                confirmPassword.value = '';
+            }
+        }
+        
+        // Toggle department requirement based on role
+        function toggleDepartmentRequired() {
+            const roleSelect = document.getElementById('role');
+            const departmentInput = document.getElementById('department');
+            const departmentLabel = document.getElementById('department-label');
+            
+            if (roleSelect.value === 'Admin') {
+                departmentInput.required = false;
+                departmentLabel.classList.remove('required');
+                document.getElementById('role-description').textContent = 
+                    'Admin: Full system access across all departments.';
+            } else {
+                departmentInput.required = true;
+                departmentLabel.classList.add('required');
+                if (roleSelect.value === 'Supervisor') {
+                    document.getElementById('role-description').textContent = 
+                        'Supervisor: Can manage tasks and users within their department.';
+                } else {
+                    document.getElementById('role-description').textContent = 
+                        'Technician: Can view and update assigned tasks only.';
+                }
+            }
+        }
+        
+        // Initialize
+        togglePasswordFields();
+        toggleDepartmentRequired();
+        
+        // Password validation
+        const newPassword = document.getElementById('new_password');
+        const confirmPassword = document.getElementById('confirm_password');
+        
+        function validatePassword() {
+            if (newPassword.value !== confirmPassword.value) {
+                confirmPassword.setCustomValidity('Passwords do not match');
+                confirmPassword.classList.add('is-invalid');
+            } else {
+                confirmPassword.setCustomValidity('');
+                confirmPassword.classList.remove('is-invalid');
+            }
+        }
+        
+        newPassword.addEventListener('input', validatePassword);
+        confirmPassword.addEventListener('input', validatePassword);
+        
+        // Email validation
+        const emailInput = document.getElementById('email');
+        emailInput.addEventListener('blur', function() {
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            if (!emailRegex.test(this.value)) {
+                this.setCustomValidity('Please enter a valid email address');
+                this.classList.add('is-invalid');
+            } else {
+                this.setCustomValidity('');
+                this.classList.remove('is-invalid');
+            }
+        });
+        
+        // Form validation
+        const forms = document.querySelectorAll('.needs-validation');
+        Array.from(forms).forEach(form => {
+            form.addEventListener('submit', event => {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+        
+        // Auto-generate password button
+        const generatePasswordBtn = document.createElement('button');
+        generatePasswordBtn.type = 'button';
+        generatePasswordBtn.className = 'btn btn-sm btn-outline-secondary mt-2';
+        generatePasswordBtn.innerHTML = '<i class="bi bi-key me-1"></i> Generate Password';
+        generatePasswordBtn.onclick = function() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+            let password = '';
+            for (let i = 0; i < 12; i++) {
+                password += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            if (newPassword) {
+                newPassword.value = password;
+                confirmPassword.value = password;
+                validatePassword();
+            }
+        };
+        
+        // Add generate password button if password fields exist
+        const passwordFields = document.getElementById('password-fields');
+        if (passwordFields && newPassword) {
+            newPassword.parentNode.appendChild(generatePasswordBtn);
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Ctrl+Enter to submit
+            if (e.ctrlKey && e.key === 'Enter') {
+                const submitBtn = document.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.click();
+                }
+            }
+            
+            // Escape to go back
+            if (e.key === 'Escape') {
+                window.location.href = "{{ url_for('manage_users') }}";
+            }
+        });
+        
+        // Warn about changing own role
+        {% if user.id == current_user.id %}
+        const roleSelect = document.getElementById('role');
+        if (roleSelect) {
+            roleSelect.addEventListener('change', function() {
+                if (this.value !== 'Admin') {
+                    if (!confirm('Warning: You are changing your own role from Admin. This may reduce your permissions. Continue?')) {
+                        this.value = 'Admin';
+                    }
+                }
+            });
+        }
+        {% endif %}
+        
+        // Copy User ID to clipboard
+        const userIdElement = document.querySelector('code');
+        if (userIdElement) {
+            userIdElement.style.cursor = 'pointer';
+            userIdElement.title = 'Click to copy User ID';
+            userIdElement.addEventListener('click', function() {
+                const text = this.textContent;
+                navigator.clipboard.writeText(text).then(() => {
+                    const originalText = this.textContent;
+                    this.textContent = 'Copied!';
+                    setTimeout(() => {
+                        this.textContent = originalText;
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy: ', err);
+                });
+            });
+        }
+    });
+</script>
+
+<style>
+    .required::after {
+        content: " *";
+        color: #dc3545;
+    }
+    
+    .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+    
+    .card-title {
+        color: #6ea8fe;
+        border-bottom: 2px solid #495057;
+        padding-bottom: 0.5rem;
+    }
+    
+    .avatar-circle {
+        width: 60px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    code {
+        background-color: rgba(108, 117, 125, 0.3);
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.25rem;
+        font-family: 'Courier New', monospace;
+        font-size: 0.875em;
+    }
+    
+    code:hover {
+        background-color: rgba(108, 117, 125, 0.5);
+    }
+</style>
+{% endblock %}

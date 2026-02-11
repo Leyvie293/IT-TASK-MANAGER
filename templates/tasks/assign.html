@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Assign Tasks - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3">Assign Tasks</h1>
+</div>
+
+<div class="row">
+    <!-- Unassigned Tasks -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Unassigned Tasks <span class="badge bg-secondary">{{ unassigned_tasks|length }}</span></h5>
+            </div>
+            <div class="card-body">
+                {% if unassigned_tasks %}
+                <div class="list-group">
+                    {% for task in unassigned_tasks %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">{{ task.title }}</h6>
+                                <small class="text-muted">{{ task.category }} • {{ task.department }}</small>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    onclick="showAssignModal('{{ task.id }}', '{{ task.title }}')">
+                                <i class="bi bi-person-plus"></i> Assign
+                            </button>
+                        </div>
+                        <small class="text-muted">Created: {{ task.created_at.strftime('%Y-%m-%d') }}</small>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-check-circle display-1 text-success"></i>
+                    <h5 class="mt-3">All tasks are assigned!</h5>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Available Users -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Available Users <span class="badge bg-success">{{ users|length }}</span></h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for user in users %}
+                    <div class="col-md-6 mb-3">
+                        <div class="card card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0">
+                                    <i class="bi bi-person-circle fs-3 text-primary"></i>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <h6 class="mb-0">{{ user.full_name }}</h6>
+                                    <small class="text-muted">{{ user.department }}</small>
+                                    <br>
+                                    <small>Tasks: {{ user.assigned_tasks|length if user.assigned_tasks else 0 }}</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Modal -->
+<div class="modal fade" id="assignModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Assign Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Assign task: <strong id="taskTitle"></strong></p>
+                <div class="mb-3">
+                    <label class="form-label">Assign to:</label>
+                    <select class="form-select" id="assignUser">
+                        <option value="">Select a user</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.full_name }} ({{ user.department }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="assignTask()">Assign</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentTaskId = null;
+
+function showAssignModal(taskId, taskTitle) {
+    currentTaskId = taskId;
+    document.getElementById('taskTitle').textContent = taskTitle;
+    document.getElementById('assignUser').value = '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('assignModal'));
+    modal.show();
+}
+
+function assignTask() {
+    const userId = document.getElementById('assignUser').value;
+    if (!userId) {
+        alert('Please select a user');
+        return;
+    }
+    
+    fetch(`/tasks/${currentTaskId}/assign`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            user_id: userId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+</script>
+{% endblock %}

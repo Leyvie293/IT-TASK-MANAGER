@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+
+{% block title %}Create Workflow Template - {{ app_name }}{% endblock %}
+
+{% block page_title %}Create Workflow Template{% endblock %}
+
+{% block page_description %}Create a new workflow template for recurring tasks{% endblock %}
+
+{% block page_actions %}
+    <a href="{{ url_for('workflow_templates') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-1"></i> Back to Templates
+    </a>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .step-card {
+        border: 2px dashed #dee2e6;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        background: rgba(13, 110, 253, 0.02);
+        transition: all 0.3s ease;
+    }
+    
+    .step-card:hover {
+        border-color: #0d6efd;
+        background: rgba(13, 110, 253, 0.05);
+    }
+    
+    .step-card.active {
+        border-color: #198754;
+        background: rgba(25, 135, 84, 0.05);
+    }
+    
+    .step-header {
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .step-actions {
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    
+    .step-card:hover .step-actions {
+        opacity: 1;
+    }
+    
+    .required-field::after {
+        content: " *";
+        color: #dc3545;
+    }
+    
+    .skill-tag {
+        display: inline-block;
+        background: #e9ecef;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        margin: 0.25rem;
+        font-size: 0.875rem;
+    }
+    
+    .skill-tag .remove-skill {
+        margin-left: 0.5rem;
+        cursor: pointer;
+        color: #6c757d;
+    }
+    
+    .skill-tag .remove-skill:hover {
+        color: #dc3545;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card shadow">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('create_workflow_template') }}" id="workflowForm">
+                    <!-- Basic Information -->
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <h5 class="mb-3">
+                                <i class="bi bi-info-circle me-2"></i> Basic Information
+                            </h5>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="name" class="form-label required-field">Template Name</label>
+                            <input type="text" class="form-control" id="name" name="name" required
+                                   placeholder="e.g., Standard IT Support">
+                            <div class="form-text">Give your template a descriptive name</div>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="category" class="form-label required-field">Category</label>
+                            <select class="form-select" id="category" name="category" required>
+                                <option value="">Select Category</option>
+                                <option value="IT Support">IT Support</option>
+                                <option value="Hardware">Hardware</option>
+                                <option value="Software">Software</option>
+                                <option value="Network">Network</option>
+                                <option value="Security">Security</option>
+                                <option value="General">General</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-12 mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" 
+                                      rows="3" placeholder="Describe what this workflow template is for..."></textarea>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="estimated_time" class="form-label">Estimated Time (hours)</label>
+                            <input type="number" class="form-control" id="estimated_time" name="estimated_time" 
+                                   min="0.5" max="100" step="0.5" value="1.0">
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="required_skills" class="form-label">Required Skills</label>
+                            <input type="text" class="form-control" id="required_skills" name="required_skills"
+                                   placeholder="e.g., Troubleshooting, Networking, Python">
+                            <div class="form-text">Separate skills with commas</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Workflow Steps -->
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5>
+                                    <i class="bi bi-diagram-3 me-2"></i> Workflow Steps
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="addStepBtn">
+                                    <i class="bi bi-plus-circle me-1"></i> Add Step
+                                </button>
+                            </div>
+                            <p class="text-muted mb-4">
+                                Define the sequence of steps for this workflow. Each step will be executed in order.
+                            </p>
+                        </div>
+                        
+                        <!-- Steps Container -->
+                        <div class="col-md-12" id="stepsContainer">
+                            <!-- Steps will be added here dynamically -->
+                            <div class="step-card" data-step-index="1">
+                                <div class="d-flex justify-content-between align-items-start mb-3 step-header">
+                                    <h6 class="mb-0">Step 1</h6>
+                                    <div class="step-actions">
+                                        <button type="button" class="btn btn-sm btn-outline-danger remove-step" 
+                                                data-bs-toggle="tooltip" title="Remove Step">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label required-field">Step Name</label>
+                                        <input type="text" class="form-control step-name" name="step_name[]" 
+                                               placeholder="e.g., Initial Assessment" required>
+                                    </div>
+                                    
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Estimated Duration (hours)</label>
+                                        <input type="number" class="form-control step-duration" 
+                                               name="step_duration[]" min="0.25" max="24" step="0.25" value="0.5">
+                                    </div>
+                                    
+                                    <div class="col-md-12 mb-3">
+                                        <label class="form-label">Description</label>
+                                        <textarea class="form-control step-description" name="step_description[]" 
+                                                  rows="2" placeholder="What needs to be done in this step..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Additional Settings -->
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <h5 class="mb-3">
+                                <i class="bi bi-gear me-2"></i> Additional Settings
+                            </h5>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="is_active" name="is_active" checked>
+                                <label class="form-check-label" for="is_active">
+                                    Template Active
+                                </label>
+                            </div>
+                            <div class="form-text">Inactive templates won't be available for new tasks</div>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="is_public" name="is_public" checked>
+                                <label class="form-check-label" for="is_public">
+                                    Public Template
+                                </label>
+                            </div>
+                            <div class="form-text">Public templates can be used by all users</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Form Actions -->
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="d-flex justify-content-between">
+                                <a href="{{ url_for('workflow_templates') }}" class="btn btn-outline-secondary">
+                                    <i class="bi bi-x-circle me-1"></i> Cancel
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-check-circle me-1"></i> Create Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    let stepCounter = 1;
+    const stepsContainer = document.getElementById('stepsContainer');
+    
+    // Function to add a new step
+    function addStep() {
+        stepCounter++;
+        const stepCard = document.createElement('div');
+        stepCard.className = 'step-card';
+        stepCard.setAttribute('data-step-index', stepCounter);
+        
+        stepCard.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start mb-3 step-header">
+                <h6 class="mb-0">Step ${stepCounter}</h6>
+                <div class="step-actions">
+                    <button type="button" class="btn btn-sm btn-outline-danger remove-step" 
+                            data-bs-toggle="tooltip" title="Remove Step">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label required-field">Step Name</label>
+                    <input type="text" class="form-control step-name" name="step_name[]" 
+                           placeholder="e.g., Troubleshooting" required>
+                </div>
+                
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Estimated Duration (hours)</label>
+                    <input type="number" class="form-control step-duration" 
+                           name="step_duration[]" min="0.25" max="24" step="0.25" value="0.5">
+                </div>
+                
+                <div class="col-md-12 mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control step-description" name="step_description[]" 
+                              rows="2" placeholder="What needs to be done in this step..."></textarea>
+                </div>
+            </div>
+        `;
+        
+        stepsContainer.appendChild(stepCard);
+        
+        // Reinitialize tooltips for new elements
+        new bootstrap.Tooltip(stepCard.querySelector('.remove-step'));
+    }
+    
+    // Add step button click handler
+    document.getElementById('addStepBtn').addEventListener('click', addStep);
+    
+    // Remove step handler (delegated)
+    stepsContainer.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-step')) {
+            const stepCard = e.target.closest('.step-card');
+            if (stepsContainer.children.length > 1) {
+                stepCard.remove();
+                // Update step numbers
+                updateStepNumbers();
+            } else {
+                alert('At least one step is required');
+            }
+        }
+    });
+    
+    // Update step numbers
+    function updateStepNumbers() {
+        const stepCards = stepsContainer.querySelectorAll('.step-card');
+        stepCards.forEach((card, index) => {
+            const stepNumber = index + 1;
+            card.setAttribute('data-step-index', stepNumber);
+            const header = card.querySelector('h6');
+            header.textContent = `Step ${stepNumber}`;
+        });
+    }
+    
+    // Form validation
+    document.getElementById('workflowForm').addEventListener('submit', function(e) {
+        let isValid = true;
+        const stepNames = this.querySelectorAll('.step-name');
+        
+        // Check if all step names are filled
+        stepNames.forEach((input, index) => {
+            if (!input.value.trim()) {
+                isValid = false;
+                input.classList.add('is-invalid');
+            } else {
+                input.classList.remove('is-invalid');
+            }
+        });
+        
+        if (!isValid) {
+            e.preventDefault();
+            alert('Please fill in all required step names');
+            return false;
+        }
+        
+        // Show loading state
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+        submitBtn.disabled = true;
+        
+        // Re-enable button after 5 seconds if form doesn't submit
+        setTimeout(() => {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }, 5000);
+        
+        return true;
+    });
+    
+    // Auto-suggest skills based on common IT skills
+    const skillsInput = document.getElementById('required_skills');
+    const commonSkills = [
+        'Troubleshooting', 'Networking', 'Hardware', 'Software', 
+        'Python', 'JavaScript', 'SQL', 'Linux', 'Windows', 
+        'Security', 'Cloud', 'Documentation', 'Communication',
+        'Problem Solving', 'Customer Service', 'System Administration'
+    ];
+    
+    // Create datalist for skills suggestions
+    const skillsDatalist = document.createElement('datalist');
+    skillsDatalist.id = 'skillsList';
+    commonSkills.forEach(skill => {
+        const option = document.createElement('option');
+        option.value = skill;
+        skillsDatalist.appendChild(option);
+    });
+    document.body.appendChild(skillsDatalist);
+    skillsInput.setAttribute('list', 'skillsList');
+});
+</script>
+{% endblock %}

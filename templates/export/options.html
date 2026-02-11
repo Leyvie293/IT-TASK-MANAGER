@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Export Data - {{ config.get('APP_NAME', 'IT Task Manager') }}{% endblock %}
+
+{% block page_title %}Export Data{% endblock %}
+
+{% block page_description %}
+Export system data in various formats
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-download me-2"></i>Export Options</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Tasks Export -->
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100 border-primary">
+                                <div class="card-body text-center">
+                                    <div class="mb-3">
+                                        <i class="bi bi-list-task display-4 text-primary"></i>
+                                    </div>
+                                    <h4 class="card-title">Tasks Export</h4>
+                                    <p class="card-text">Export all tasks to CSV format. Exports are filtered based on your user role.</p>
+                                    <div class="mt-4">
+                                        <a href="{{ url_for('export_data', data_type='tasks') }}" class="btn btn-primary">
+                                            <i class="bi bi-download me-2"></i>Export Tasks (CSV)
+                                        </a>
+                                        <a href="{{ url_for('export_data_api', data_type='tasks') }}" class="btn btn-outline-primary mt-2">
+                                            <i class="bi bi-code-slash me-2"></i>Export Tasks (JSON)
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="card-footer text-muted small">
+                                    {% if current_user.role == 'Admin' %}
+                                    Admins can export all tasks
+                                    {% elif current_user.role == 'Supervisor' %}
+                                    Supervisors can export tasks from their department
+                                    {% else %}
+                                    Users can export only their assigned tasks
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Users Export (Admin only) -->
+                        {% if current_user.role == 'Admin' %}
+                        <div class="col-md-6 mb-4">
+                            <div class="card h-100 border-success">
+                                <div class="card-body text-center">
+                                    <div class="mb-3">
+                                        <i class="bi bi-people display-4 text-success"></i>
+                                    </div>
+                                    <h4 class="card-title">Users Export</h4>
+                                    <p class="card-text">Export all user accounts to CSV format. Available to administrators only.</p>
+                                    <div class="mt-4">
+                                        <a href="{{ url_for('export_data', data_type='users') }}" class="btn btn-success">
+                                            <i class="bi bi-download me-2"></i>Export Users (CSV)
+                                        </a>
+                                        <a href="{{ url_for('export_data_api', data_type='users') }}" class="btn btn-outline-success mt-2">
+                                            <i class="bi bi-code-slash me-2"></i>Export Users (JSON)
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="card-footer text-muted small">
+                                    Administrator access required
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Task Controller Export (Alternative) -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="card border-info">
+                                <div class="card-header bg-info text-white">
+                                    <h5 class="mb-0"><i class="bi bi-controller me-2"></i>Task Controller Export</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p>You can also export tasks directly from the task controller using the button below:</p>
+                                    <div class="d-grid gap-2 d-md-flex">
+                                        {% if endpoint_exists('task.export_csv') %}
+                                        <a href="{{ url_for('task.export_csv') }}" class="btn btn-info">
+                                            <i class="bi bi-file-earmark-spreadsheet me-2"></i>Export from Task Controller
+                                        </a>
+                                        {% endif %}
+                                        <a href="{{ url_for('task.task_list') }}" class="btn btn-outline-info ms-2">
+                                            <i class="bi bi-arrow-left me-2"></i>Back to Tasks
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Export Information -->
+                    <div class="alert alert-info mt-4">
+                        <h5><i class="bi bi-info-circle me-2"></i>Export Information</h5>
+                        <ul class="mb-0">
+                            <li>CSV exports are compatible with Excel, Google Sheets, and other spreadsheet software</li>
+                            <li>JSON exports are suitable for APIs and data processing applications</li>
+                            <li>Exports are generated in real-time and reflect current data</li>
+                            <li>Large exports may take a few moments to generate</li>
+                            <li>All exports include a timestamp in the filename</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Quick Export -->
+                    <div class="alert alert-warning">
+                        <h5><i class="bi bi-lightning me-2"></i>Quick Export</h5>
+                        <p class="mb-2">Need to export with specific filters?</p>
+                        <div class="d-flex gap-2">
+                            <a href="{{ url_for('export_data', data_type='tasks') }}?status=pending" class="btn btn-sm btn-outline-warning">
+                                Pending Tasks
+                            </a>
+                            <a href="{{ url_for('export_data', data_type='tasks') }}?status=completed" class="btn btn-sm btn-outline-warning">
+                                Completed Tasks
+                            </a>
+                            <a href="{{ url_for('export_data', data_type='tasks') }}?priority=high" class="btn btn-sm btn-outline-warning">
+                                High Priority
+                            </a>
+                            {% if current_user.role == 'Admin' %}
+                            <a href="{{ url_for('export_data', data_type='users') }}" class="btn btn-sm btn-outline-warning">
+                                All Users
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Add loading indicators to export buttons
+document.addEventListener('DOMContentLoaded', function() {
+    const exportButtons = document.querySelectorAll('a[href*="export"]');
+    
+    exportButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            // Only add loading for actual export links, not navigation
+            if (this.href.includes('/export/') || this.href.includes('/api/export/')) {
+                const originalText = this.innerHTML;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating...';
+                this.classList.add('disabled');
+                
+                // Reset after 10 seconds if still on page
+                setTimeout(() => {
+                    this.innerHTML = originalText;
+                    this.classList.remove('disabled');
+                }, 10000);
+            }
+        });
+    });
+});
+</script>
+
+<style>
+.card {
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+
+.btn {
+    border-radius: 8px;
+    padding: 10px 20px;
+}
+
+.alert {
+    border-radius: 10px;
+}
+
+.card-footer {
+    background-color: #f8f9fa;
+    border-top: 1px solid #eee;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}{{ template.name }} - {{ app_name }}{% endblock %}
+
+{% block page_title %}{{ template.name }}{% endblock %}
+
+{% block page_description %}{{ template.description }}{% endblock %}
+
+{% block page_actions %}
+    <div class="btn-group">
+        <a href="{{ url_for('workflow_templates') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Back
+        </a>
+        <a href="{{ url_for('edit_workflow_template', template_id=template.id) }}" class="btn btn-primary">
+            <i class="bi bi-pencil me-1"></i> Edit
+        </a>
+    </div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Template Details -->
+        <div class="card shadow mb-4">
+            <div class="card-header">
+                <h6 class="m-0 fw-bold">
+                    <i class="bi bi-info-circle me-2"></i> Template Details
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Category</label>
+                        <div class="badge bg-info">{{ template.category }}</div>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Status</label>
+                        <div>
+                            <span class="badge bg-{{ 'success' if template.is_active else 'danger' }}">
+                                {{ 'Active' if template.is_active else 'Inactive' }}
+                            </span>
+                            <span class="badge bg-{{ 'success' if template.is_public else 'warning' }} ms-2">
+                                {{ 'Public' if template.is_public else 'Private' }}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label fw-bold">Description</label>
+                        <p>{{ template.description or 'No description provided' }}</p>
+                    </div>
+                    
+                    {% if template.estimated_time %}
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Estimated Time</label>
+                        <div class="fw-bold">{{ template.estimated_time }} hours</div>
+                    </div>
+                    {% endif %}
+                    
+                    {% if template.required_skills and template.required_skills|length > 0 %}
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Required Skills</label>
+                        <div>
+                            {% for skill in template.required_skills %}
+                            <span class="badge bg-secondary me-1 mb-1">{{ skill }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label fw-bold">Created</label>
+                        <div>{{ template.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Workflow Steps -->
+        <div class="card shadow">
+            <div class="card-header">
+                <h6 class="m-0 fw-bold">
+                    <i class="bi bi-diagram-3 me-2"></i> Workflow Steps
+                </h6>
+            </div>
+            <div class="card-body">
+                {% if template.steps and template.steps|length > 0 %}
+                <div class="timeline">
+                    {% for step in template.steps %}
+                    <div class="timeline-item mb-4">
+                        <div class="timeline-marker bg-primary"></div>
+                        <div class="timeline-content">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <h6 class="mb-1">Step {{ loop.index }}: {{ step.name }}</h6>
+                                        {% if step.estimated_time %}
+                                        <small class="text-muted">{{ step.estimated_time }} hours</small>
+                                        {% endif %}
+                                    </div>
+                                    {% if step.description %}
+                                    <p class="mb-0 text-muted">{{ step.description }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-list-check fs-1 text-muted mb-3"></i>
+                    <h5 class="text-muted">No steps defined</h5>
+                    <p class="text-muted">Edit this template to add workflow steps.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sidebar Actions -->
+    <div class="col-lg-4">
+        <!-- Quick Actions -->
+        <div class="card shadow mb-4">
+            <div class="card-header">
+                <h6 class="m-0 fw-bold">
+                    <i class="bi bi-lightning me-2"></i> Quick Actions
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('edit_workflow_template', template_id=template.id) }}" 
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-pencil me-2"></i> Edit Template
+                    </a>
+                    
+                    {% if template.is_active %}
+                    <button class="btn btn-outline-success" 
+                            onclick="useTemplate('{{ template.id }}')">
+                        <i class="bi bi-play-circle me-2"></i> Use This Template
+                    </button>
+                    {% else %}
+                    <button class="btn btn-outline-secondary" disabled>
+                        <i class="bi bi-slash-circle me-2"></i> Template Inactive
+                    </button>
+                    {% endif %}
+                    
+                    <form method="POST" action="{{ url_for('delete_workflow_template', template_id=template.id) }}"
+                          class="d-grid" onsubmit="return confirm('Are you sure you want to delete this template? This action cannot be undone.')">
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="bi bi-trash me-2"></i> Delete Template
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Template Statistics -->
+        <div class="card shadow">
+            <div class="card-header">
+                <h6 class="m-0 fw-bold">
+                    <i class="bi bi-bar-chart me-2"></i> Template Info
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Steps</span>
+                        <span class="badge bg-primary rounded-pill">
+                            {{ template.steps|length if template.steps else 0 }}
+                        </span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Category</span>
+                        <span class="text-muted">{{ template.category }}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Visibility</span>
+                        <span class="badge bg-{{ 'success' if template.is_public else 'warning' }}">
+                            {{ 'Public' if template.is_public else 'Private' }}
+                        </span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Created</span>
+                        <span class="text-muted">{{ template.created_at.strftime('%Y-%m-%d') }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function useTemplate(templateId) {
+    if (confirm('Create a new task using this template?')) {
+        // In a real implementation, this would redirect to task creation with template pre-selected
+        alert('This feature will be implemented in the next version.');
+        // window.location.href = `/tasks/create?template=${templateId}`;
+    }
+}
+</script>
+<style>
+.timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -2rem;
+    top: 1rem;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 0 3px #dee2e6;
+}
+
+.timeline-content {
+    margin-left: 1rem;
+}
+</style>
+{% endblock %}

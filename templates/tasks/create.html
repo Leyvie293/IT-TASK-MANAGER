@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Create Task - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title mb-0">Create New Task</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('task.create') }}">
+                        <div class="mb-3">
+                            <label for="title" class="form-label">Title *</label>
+                            <input type="text" class="form-control" id="title" name="title" 
+                                   value="{{ request.form.title if request.form }}" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description *</label>
+                            <textarea class="form-control" id="description" name="description" rows="3" required>{{ request.form.description if request.form }}</textarea>
+                        </div>
+                        
+                        <!-- REQUIRED CATEGORY FIELD -->
+                        <div class="mb-3">
+                            <label for="category" class="form-label">Category *</label>
+                            <select class="form-select" id="category" name="category" required>
+                                <option value="">Select Category</option>
+                                {% for cat in categories %}
+                                <option value="{{ cat }}" 
+                                        {% if request.form and request.form.category == cat %}selected{% endif %}>
+                                    {{ cat }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="priority" class="form-label">Priority</label>
+                                <select class="form-select" id="priority" name="priority">
+                                    <option value="Low" {% if request.form and request.form.priority == 'Low' %}selected{% endif %}>Low</option>
+                                    <option value="Medium" 
+                                            {% if not request.form or (request.form and request.form.priority == 'Medium') %}selected{% endif %}>
+                                        Medium
+                                    </option>
+                                    <option value="High" {% if request.form and request.form.priority == 'High' %}selected{% endif %}>High</option>
+                                    <option value="Critical" {% if request.form and request.form.priority == 'Critical' %}selected{% endif %}>Critical</option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="department" class="form-label">Department *</label>
+                                {% if current_user.role == 'Admin' %}
+                                <select class="form-select" id="department" name="department" required>
+                                    <option value="">Select Department</option>
+                                    {% for dept in departments %}
+                                    <option value="{{ dept }}" 
+                                            {% if request.form and request.form.department == dept %}selected
+                                            {% elif current_user.department == dept and not request.form %}selected{% endif %}>
+                                        {{ dept }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                {% else %}
+                                <input type="text" class="form-control" value="{{ current_user.department }}" readonly>
+                                <input type="hidden" name="department" value="{{ current_user.department }}">
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="due_date" class="form-label">Due Date</label>
+                                <input type="date" class="form-control" id="due_date" name="due_date"
+                                       value="{{ request.form.due_date if request.form }}">
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="assigned_to" class="form-label">Assign To</label>
+                                <select class="form-select" id="assigned_to" name="assigned_to">
+                                    <option value="">-- Unassigned --</option>
+                                    {% for user in users %}
+                                    <option value="{{ user.id }}"
+                                            {% if request.form and request.form.assigned_to == user.id|string %}selected{% endif %}>
+                                        {{ user.full_name }} ({{ user.role }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="estimated_hours" class="form-label">Estimated Hours</label>
+                            <input type="number" class="form-control" id="estimated_hours" name="estimated_hours" 
+                                   value="{{ request.form.estimated_hours if request.form else '1.0' }}" 
+                                   step="0.5" min="0.5">
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <button type="submit" class="btn btn-primary">Create Task</button>
+                            <a href="{{ url_for('task.task_list') }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

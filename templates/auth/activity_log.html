@@ -1,0 +1,549 @@
+{% extends "base.html" %}
+
+{% block title %}Activity Log - {{ config.get('APP_NAME', 'IT Task Manager') }}{% endblock %}
+
+{% block page_title %}Activity Log{% endblock %}
+
+{% block page_description %}
+View your account activity and login history
+{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group">
+    <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+        <i class="bi bi-download me-1"></i> Export
+    </button>
+    <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="#" onclick="exportLog('csv')"><i class="bi bi-file-earmark-spreadsheet me-2"></i> CSV</a></li>
+        <li><a class="dropdown-item" href="#" onclick="exportLog('pdf')"><i class="bi bi-file-pdf me-2"></i> PDF</a></li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Filters Card -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('auth.activity_log') }}" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Activity Type</label>
+                    <select name="activity_type" class="form-select">
+                        <option value="">All Types</option>
+                        <option value="login" {% if request.args.get('activity_type') == 'login' %}selected{% endif %}>Login</option>
+                        <option value="logout" {% if request.args.get('activity_type') == 'logout' %}selected{% endif %}>Logout</option>
+                        <option value="profile_update" {% if request.args.get('activity_type') == 'profile_update' %}selected{% endif %}>Profile Update</option>
+                        <option value="password_change" {% if request.args.get('activity_type') == 'password_change' %}selected{% endif %}>Password Change</option>
+                        <option value="failed_login" {% if request.args.get('activity_type') == 'failed_login' %}selected{% endif %}>Failed Login</option>
+                        <option value="task_activity" {% if request.args.get('activity_type') == 'task_activity' %}selected{% endif %}>Task Activity</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="">All Statuses</option>
+                        <option value="success" {% if request.args.get('status') == 'success' %}selected{% endif %}>Success</option>
+                        <option value="failed" {% if request.args.get('status') == 'failed' %}selected{% endif %}>Failed</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Date From</label>
+                    <input type="date" name="date_from" class="form-control" 
+                           value="{{ request.args.get('date_from') }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Date To</label>
+                    <input type="date" name="date_to" class="form-control" 
+                           value="{{ request.args.get('date_to') }}">
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-funnel me-1"></i> Apply Filters
+                    </button>
+                    <a href="{{ url_for('auth.activity_log') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-circle me-1"></i> Clear
+                    </a>
+                    <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#helpModal">
+                        <i class="bi bi-question-circle me-1"></i> Help
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Stats Summary -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary bg-opacity-10 border-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-primary">Total Activities</h6>
+                            <h3 class="mb-0">{{ total_activities }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-clock-history fs-1 text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success bg-opacity-10 border-success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-success">Successful</h6>
+                            <h3 class="mb-0">{{ success_count }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-check-circle fs-1 text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger bg-opacity-10 border-danger">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-danger">Failed</h6>
+                            <h3 class="mb-0">{{ failed_count }}</h3>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-exclamation-circle fs-1 text-danger"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info bg-opacity-10 border-info">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-info">Last Login</h6>
+                            <h5 class="mb-0">
+                                {% if last_login %}
+                                {{ last_login.strftime('%b %d, %H:%M') }}
+                                {% else %}
+                                Never
+                                {% endif %}
+                            </h5>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-person-check fs-1 text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Activity Log Card -->
+    <div class="card shadow">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Your Activity Log</h5>
+            <div class="d-flex">
+                <span class="badge bg-light text-dark me-3 align-self-center">
+                    Showing {{ activities.items|length }} of {{ total_activities }}
+                </span>
+                <a href="{{ url_for('auth.profile') }}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i>Back to Profile
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if activities.items %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Activity Type</th>
+                            <th>Description</th>
+                            <th>IP Address</th>
+                            <th>Location</th>
+                            <th>Status</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for activity in activities.items %}
+                        <tr>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    <span>{{ activity.created_at.strftime('%Y-%m-%d') }}</span>
+                                    <small class="text-muted">{{ activity.created_at.strftime('%H:%M:%S') }}</small>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if activity.activity_type == 'User Login' or activity.activity_type == 'Login Successful' %}bg-success
+                                    {% elif activity.activity_type == 'User Logout' %}bg-secondary
+                                    {% elif 'Failed' in activity.activity_type or activity.activity_type == 'Login Failed' %}bg-danger
+                                    {% elif 'Updated' in activity.activity_type or activity.activity_type == 'Profile Updated' %}bg-warning text-dark
+                                    {% elif activity.activity_type == 'Password Changed' %}bg-info
+                                    {% else %}bg-primary{% endif %}">
+                                    <i class="bi 
+                                        {% if 'Login' in activity.activity_type %}bi-box-arrow-in-right
+                                        {% elif 'Logout' in activity.activity_type %}bi-box-arrow-right
+                                        {% elif 'Update' in activity.activity_type %}bi-pencil
+                                        {% elif 'Password' in activity.activity_type %}bi-key
+                                        {% else %}bi-activity{% endif %} me-1"></i>
+                                    {{ activity.activity_type }}
+                                </span>
+                            </td>
+                            <td>
+                                <div>{{ activity.description|truncate(60) }}</div>
+                                {% if activity.details %}
+                                <small class="text-muted">{{ activity.details|truncate(40) }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if activity.ip_address %}
+                                <code class="bg-light p-1 rounded">{{ activity.ip_address }}</code>
+                                {% else %}
+                                <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if activity.ip_address and activity.ip_address != '127.0.0.1' %}
+                                <span class="badge bg-light text-dark">
+                                    <i class="bi bi-geo-alt me-1"></i>
+                                    {% if activity.ip_address.startswith('192.168') or activity.ip_address.startswith('10.') %}
+                                    Local Network
+                                    {% else %}
+                                    External
+                                    {% endif %}
+                                </span>
+                                {% else %}
+                                <span class="text-muted">Local</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if activity.status == 'success' %}bg-success
+                                    {% elif activity.status == 'failed' %}bg-danger
+                                    {% else %}bg-secondary{% endif %}">
+                                    {% if activity.status == 'success' %}
+                                    <i class="bi bi-check-circle me-1"></i>
+                                    {% elif activity.status == 'failed' %}
+                                    <i class="bi bi-x-circle me-1"></i>
+                                    {% endif %}
+                                    {{ activity.status|title }}
+                                </span>
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-info" 
+                                        data-bs-toggle="modal" data-bs-target="#detailsModal{{ activity.id }}">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+
+                        <!-- Details Modal for each activity -->
+                        <div class="modal fade" id="detailsModal{{ activity.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Activity Details</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <dl class="row">
+                                            <dt class="col-sm-4">Activity Type:</dt>
+                                            <dd class="col-sm-8">
+                                                <span class="badge 
+                                                    {% if activity.activity_type == 'User Login' or activity.activity_type == 'Login Successful' %}bg-success
+                                                    {% elif activity.activity_type == 'User Logout' %}bg-secondary
+                                                    {% elif 'Failed' in activity.activity_type or activity.activity_type == 'Login Failed' %}bg-danger
+                                                    {% elif 'Updated' in activity.activity_type or activity.activity_type == 'Profile Updated' %}bg-warning text-dark
+                                                    {% elif activity.activity_type == 'Password Changed' %}bg-info
+                                                    {% else %}bg-primary{% endif %}">
+                                                    {{ activity.activity_type }}
+                                                </span>
+                                            </dd>
+
+                                            <dt class="col-sm-4">Date & Time:</dt>
+                                            <dd class="col-sm-8">
+                                                {{ activity.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                            </dd>
+
+                                            <dt class="col-sm-4">Description:</dt>
+                                            <dd class="col-sm-8">{{ activity.description }}</dd>
+
+                                            {% if activity.details %}
+                                            <dt class="col-sm-4">Details:</dt>
+                                            <dd class="col-sm-8">
+                                                <pre class="bg-light p-2 rounded">{{ activity.details }}</pre>
+                                            </dd>
+                                            {% endif %}
+
+                                            <dt class="col-sm-4">IP Address:</dt>
+                                            <dd class="col-sm-8">
+                                                {% if activity.ip_address %}
+                                                <code>{{ activity.ip_address }}</code>
+                                                {% else %}
+                                                <span class="text-muted">Not recorded</span>
+                                                {% endif %}
+                                            </dd>
+
+                                            <dt class="col-sm-4">User Agent:</dt>
+                                            <dd class="col-sm-8">
+                                                {% if activity.user_agent %}
+                                                <small class="text-muted">{{ activity.user_agent }}</small>
+                                                {% else %}
+                                                <span class="text-muted">Not recorded</span>
+                                                {% endif %}
+                                            </dd>
+
+                                            <dt class="col-sm-4">Status:</dt>
+                                            <dd class="col-sm-8">
+                                                <span class="badge 
+                                                    {% if activity.status == 'success' %}bg-success
+                                                    {% elif activity.status == 'failed' %}bg-danger
+                                                    {% else %}bg-secondary{% endif %}">
+                                                    {{ activity.status|title }}
+                                                </span>
+                                            </dd>
+                                        </dl>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if activities.pages > 1 %}
+            <nav aria-label="Activity log pagination" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if activities.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('auth.activity_log', page=activities.prev_num, **request.args) }}">
+                            <i class="bi bi-chevron-left"></i> Previous
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link"><i class="bi bi-chevron-left"></i> Previous</span>
+                    </li>
+                    {% endif %}
+
+                    {% for page_num in activities.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                        {% if page_num %}
+                            {% if page_num == activities.page %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_num }}</span>
+                            </li>
+                            {% else %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('auth.activity_log', page=page_num, **request.args) }}">
+                                    {{ page_num }}
+                                </a>
+                            </li>
+                            {% endif %}
+                        {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if activities.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('auth.activity_log', page=activities.next_num, **request.args) }}">
+                            Next <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">Next <i class="bi bi-chevron-right"></i></span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+
+            {% else %}
+            <!-- Empty State -->
+            <div class="text-center py-5">
+                <div class="mb-4">
+                    <i class="bi bi-clock-history display-1 text-muted"></i>
+                </div>
+                <h4 class="text-muted">No activity records found</h4>
+                <p class="text-muted mb-4">Your activity log is empty. Activities will appear here as you use the system.</p>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-primary">
+                    <i class="bi bi-speedometer2 me-1"></i> Go to Dashboard
+                </a>
+            </div>
+            {% endif %}
+        </div>
+        <div class="card-footer text-muted">
+            <div class="row">
+                <div class="col-md-6">
+                    <small>
+                        <i class="bi bi-info-circle me-1"></i>
+                        Activity log retention: 90 days
+                    </small>
+                </div>
+                <div class="col-md-6 text-end">
+                    <small>
+                        Last updated: {{ now.strftime('%Y-%m-%d %H:%M:%S') }}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div class="modal fade" id="helpModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-question-circle me-2"></i>Activity Log Help</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>Understanding Activity Types:</h6>
+                    <ul class="mb-3">
+                        <li><span class="badge bg-success">Login Successful</span> - Successful authentication</li>
+                        <li><span class="badge bg-danger">Login Failed</span> - Failed authentication attempts</li>
+                        <li><span class="badge bg-secondary">User Logout</span> - Session termination</li>
+                        <li><span class="badge bg-warning text-dark">Profile Updated</span> - Profile changes</li>
+                        <li><span class="badge bg-info">Password Changed</span> - Password updates</li>
+                    </ul>
+                    
+                    <h6>IP Address Information:</h6>
+                    <p class="mb-3">
+                        IP addresses starting with 192.168 or 10. are from your local network. 
+                        Other IPs are from external networks.
+                    </p>
+                    
+                    <h6>Security Tips:</h6>
+                    <ul>
+                        <li>Regularly review your login activity</li>
+                        <li>Report any unrecognized activities</li>
+                        <li>Ensure you logout from shared computers</li>
+                        <li>Contact admin if you see suspicious activity</li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function exportLog(format) {
+        let url = "{{ url_for('auth.export_activity_log') }}";
+        const params = new URLSearchParams(window.location.search);
+        
+        if (format === 'csv') {
+            params.append('format', 'csv');
+            window.location.href = url + '?' + params.toString();
+        } else if (format === 'pdf') {
+            params.append('format', 'pdf');
+            window.location.href = url + '?' + params.toString();
+        }
+        
+        // Show loading indicator
+        const exportBtn = event.target.closest('a');
+        const originalHtml = exportBtn.innerHTML;
+        exportBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Exporting...';
+        
+        // Reset button after 3 seconds
+        setTimeout(() => {
+            exportBtn.innerHTML = originalHtml;
+        }, 3000);
+    }
+
+    // Auto-refresh activity log every 60 seconds if on first page
+    document.addEventListener('DOMContentLoaded', function() {
+        const currentPage = {{ activities.page if activities else 1 }};
+        if (currentPage === 1 && !window.location.search.includes('date_from')) {
+            setTimeout(function() {
+                window.location.reload();
+            }, 60000);
+        }
+        
+        // Initialize tooltips
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+
+    // Filter form validation
+    document.addEventListener('DOMContentLoaded', function() {
+        const filterForm = document.querySelector('form[method="GET"]');
+        const dateFrom = filterForm.querySelector('input[name="date_from"]');
+        const dateTo = filterForm.querySelector('input[name="date_to"]');
+        
+        filterForm.addEventListener('submit', function(e) {
+            if (dateFrom.value && dateTo.value) {
+                const fromDate = new Date(dateFrom.value);
+                const toDate = new Date(dateTo.value);
+                
+                if (fromDate > toDate) {
+                    e.preventDefault();
+                    alert('"Date From" cannot be after "Date To"');
+                    dateFrom.focus();
+                    return false;
+                }
+                
+                // Limit date range to 90 days for performance
+                const diffTime = Math.abs(toDate - fromDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (diffDays > 90) {
+                    e.preventDefault();
+                    alert('Date range cannot exceed 90 days for performance reasons');
+                    return false;
+                }
+            }
+        });
+    });
+</script>
+
+<style>
+    /* Additional styles for activity log */
+    .table-hover tbody tr:hover {
+        background-color: rgba(var(--bs-primary-rgb), 0.05);
+    }
+    
+    .badge {
+        font-size: 0.8em;
+        padding: 0.4em 0.8em;
+    }
+    
+    pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-size: 0.875em;
+    }
+    
+    .pagination .page-item.active .page-link {
+        background-color: var(--bs-primary);
+        border-color: var(--bs-primary);
+    }
+    
+    .modal pre {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    
+    .card-header {
+        background-color: rgba(var(--bs-primary-rgb), 0.05);
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Create New User - {{ app_name }}{% endblock %}
+
+{% block page_title %}Create New User{% endblock %}
+
+{% block page_description %}Add a new user to the system{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-person-plus me-2"></i>Create New User
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('create_user') }}">
+                        
+                        <!-- Basic Information -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="first_name" class="form-label required">First Name</label>
+                                    <input type="text" class="form-control {% if errors and errors.first_name %}is-invalid{% endif %}" 
+                                           id="first_name" name="first_name" 
+                                           value="{{ form_data.first_name if form_data and form_data.first_name else '' }}" required>
+                                    {% if errors and errors.first_name %}
+                                    <div class="invalid-feedback">{{ errors.first_name }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="last_name" class="form-label required">Last Name</label>
+                                    <input type="text" class="form-control {% if errors and errors.last_name %}is-invalid{% endif %}" 
+                                           id="last_name" name="last_name" 
+                                           value="{{ form_data.last_name if form_data and form_data.last_name else '' }}" required>
+                                    {% if errors and errors.last_name %}
+                                    <div class="invalid-feedback">{{ errors.last_name }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Account Information -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="email" class="form-label required">Email Address</label>
+                                    <input type="email" class="form-control {% if errors and errors.email %}is-invalid{% endif %}" 
+                                           id="email" name="email" 
+                                           value="{{ form_data.email if form_data and form_data.email else '' }}" required>
+                                    {% if errors and errors.email %}
+                                    <div class="invalid-feedback">{{ errors.email }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <!-- REMOVED USERNAME FIELD -->
+                        </div>
+
+                        <!-- Role and Department -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="role" class="form-label required">Role</label>
+                                    <select class="form-select" id="role" name="role" required>
+                                        <option value="Technician" {% if form_data and form_data.role == 'Technician' %}selected{% endif %}>Technician</option>
+                                        <option value="Supervisor" {% if form_data and form_data.role == 'Supervisor' %}selected{% endif %}>Supervisor</option>
+                                        <option value="Admin" {% if form_data and form_data.role == 'Admin' %}selected{% endif %}>Admin</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="department" class="form-label" id="dept-label">
+                                        Department
+                                        <small class="text-muted">(Required for non-Admins)</small>
+                                    </label>
+                                    <input type="text" class="form-control {% if errors and errors.department %}is-invalid{% endif %}" 
+                                           id="department" name="department" 
+                                           value="{{ form_data.department if form_data and form_data.department else '' }}"
+                                           placeholder="e.g., IT Support, Sales, HR, Finance">
+                                    {% if errors and errors.department %}
+                                    <div class="invalid-feedback">{{ errors.department }}</div>
+                                    {% endif %}
+                                    <div class="form-text">
+                                        Type the department name. Admins don't need a department.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Passwords -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="password" class="form-label required">Password</label>
+                                    <input type="password" class="form-control {% if errors and errors.password %}is-invalid{% endif %}" 
+                                           id="password" name="password" required>
+                                    {% if errors and errors.password %}
+                                    <div class="invalid-feedback">{{ errors.password }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="confirm_password" class="form-label required">Confirm Password</label>
+                                    <input type="password" class="form-control {% if errors and errors.confirm_password %}is-invalid{% endif %}" 
+                                           id="confirm_password" name="confirm_password" required>
+                                    {% if errors and errors.confirm_password %}
+                                    <div class="invalid-feedback">{{ errors.confirm_password }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Status -->
+                        <div class="mb-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                                       {% if not form_data or form_data.is_active %}checked{% endif %}>
+                                <label class="form-check-label" for="is_active">
+                                    Active Account (User can log in)
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Form Actions -->
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left me-2"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle me-2"></i> Create User
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add department requirement logic for non-admins
+        const roleSelect = document.getElementById('role');
+        const departmentInput = document.getElementById('department');
+        const deptLabel = document.getElementById('dept-label');
+        
+        function updateDepartmentRequirement() {
+            if (roleSelect.value === 'Admin') {
+                // Remove required attribute and styling for Admins
+                departmentInput.required = false;
+                deptLabel.classList.remove('required');
+                departmentInput.placeholder = "Admins don't need a department";
+            } else {
+                // Add required attribute and styling for non-Admins
+                departmentInput.required = true;
+                deptLabel.classList.add('required');
+                departmentInput.placeholder = "e.g., IT Support, Sales, HR, Finance";
+            }
+        }
+        
+        // Initialize on page load
+        updateDepartmentRequirement();
+        
+        // Update when role changes
+        roleSelect.addEventListener('change', updateDepartmentRequirement);
+        
+        // REMOVED AUTO-SUGGEST USERNAME FROM EMAIL LOGIC
+        
+        // Form validation
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function(event) {
+            // Clear previous custom validations
+            departmentInput.setCustomValidity('');
+            
+            // Validate department for non-admins
+            if (roleSelect.value !== 'Admin' && !departmentInput.value.trim()) {
+                departmentInput.setCustomValidity('Department is required for non-admin users.');
+                event.preventDefault();
+                departmentInput.classList.add('is-invalid');
+            } else {
+                departmentInput.classList.remove('is-invalid');
+            }
+            
+            // Validate passwords match
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
+            
+            if (password !== confirmPassword) {
+                document.getElementById('confirm_password').setCustomValidity('Passwords do not match.');
+                event.preventDefault();
+                document.getElementById('confirm_password').classList.add('is-invalid');
+            }
+        });
+    });
+</script>
+
+<style>
+    .required::after {
+        content: " *";
+        color: #dc3545;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Users - {{ config.get('APP_NAME', 'IT Task Manager') }}{% endblock %}
+
+{% block page_title %}Manage Users{% endblock %}
+
+{% block page_description %}
+Manage user accounts and permissions
+{% endblock %}
+
+{% block page_actions %}
+<div class="btn-group">
+    <a href="{{ url_for('register_user') }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-person-plus me-1"></i> Add New User
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card shadow">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-people me-2"></i>User Management</h5>
+            <span class="badge bg-primary">{{ users|length }} users</span>
+        </div>
+        
+        {% if users %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Username</th>
+                        <th>Role</th>
+                        <th>Department</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Last Login</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.id }}</td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-person-circle me-2"></i>
+                                <div>
+                                    <div>{{ user.first_name }} {{ user.last_name }}</div>
+                                    {% if user == current_user %}
+                                    <small class="text-primary">(You)</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>{{ user.email }}</td>
+                        <td>{{ user.username }}</td>
+                        <td>
+                            <span class="badge 
+                                {% if user.role == 'Admin' %}bg-danger
+                                {% elif user.role == 'Supervisor' %}bg-warning text-dark
+                                {% else %}bg-info{% endif %}">
+                                {{ user.role }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if user.department %}
+                            <span class="badge bg-light text-dark">{{ user.department }}</span>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if user.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small>{{ user.created_at.strftime('%Y-%m-%d') }}</small>
+                        </td>
+                        <td>
+                            {% if user.last_login %}
+                            <small>{{ user.last_login.strftime('%Y-%m-%d %H:%M') }}</small>
+                            {% else %}
+                            <small class="text-muted">Never</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                {% if user != current_user %}
+                                <button class="btn btn-outline-warning" onclick="toggleUserStatus({{ user.id }}, {{ user.is_active|lower }})">
+                                    <i class="bi bi-power"></i>
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-outline-info" onclick="viewUserDetails({{ user.id }})">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                {% if user != current_user %}
+                                <button class="btn btn-outline-danger" onclick="deleteUser({{ user.id }}, '{{ user.email }}')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% else %}
+        <!-- Empty State -->
+        <div class="card-body text-center py-5">
+            <div class="mb-4">
+                <i class="bi bi-people display-1 text-muted"></i>
+            </div>
+            <h4 class="text-muted">No users found</h4>
+            <p class="text-muted mb-4">There are no users in the system yet.</p>
+            <a href="{{ url_for('register_user') }}" class="btn btn-primary">
+                <i class="bi bi-person-plus me-1"></i> Add First User
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- User Details Modal -->
+<div class="modal fade" id="userDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-person-circle me-2"></i>User Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="userDetailsContent">
+                <!-- Content loaded via AJAX -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Toggle user status
+function toggleUserStatus(userId, isActive) {
+    const action = isActive ? 'deactivate' : 'activate';
+    const confirmMsg = isActive 
+        ? 'Are you sure you want to deactivate this user? They will not be able to log in.'
+        : 'Are you sure you want to activate this user?';
+    
+    if (confirm(confirmMsg)) {
+        fetch(`/auth/manage_users/${userId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+        });
+    }
+}
+
+// View user details
+function viewUserDetails(userId) {
+    fetch(`/api/users/${userId}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const user = data.user;
+            let content = `
+                <div class="row">
+                    <div class="col-md-4 text-center mb-4">
+                        <div class="mb-3">
+                            <i class="bi bi-person-circle display-1 text-primary"></i>
+                        </div>
+                        <h4>${user.first_name} ${user.last_name}</h4>
+                        <span class="badge ${user.role === 'Admin' ? 'bg-danger' : user.role === 'Supervisor' ? 'bg-warning text-dark' : 'bg-info'}">
+                            ${user.role}
+                        </span>
+                    </div>
+                    <div class="col-md-8">
+                        <table class="table">
+                            <tr>
+                                <th>Email:</th>
+                                <td>${user.email}</td>
+                            </tr>
+                            <tr>
+                                <th>Username:</th>
+                                <td>${user.username}</td>
+                            </tr>
+                            <tr>
+                                <th>Department:</th>
+                                <td>${user.department || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <th>Status:</th>
+                                <td>
+                                    <span class="badge ${user.is_active ? 'bg-success' : 'bg-danger'}">
+                                        ${user.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Created:</th>
+                                <td>${user.created_at ? new Date(user.created_at).toLocaleString() : 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <th>Last Login:</th>
+                                <td>${user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}</td>
+                            </tr>
+                            <tr>
+                                <th>Login Count:</th>
+                                <td>${user.login_count || 0}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            `;
+            document.getElementById('userDetailsContent').innerHTML = content;
+            $('#userDetailsModal').modal('show');
+        } else {
+            alert('Error loading user details: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+
+// Delete user
+function deleteUser(userId, userEmail) {
+    if (confirm(`Are you sure you want to delete user "${userEmail}"? This action cannot be undone.`)) {
+        fetch(`/auth/manage_users/${userId}/delete`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+        });
+    }
+}
+
+// Add the missing API endpoint if it doesn't exist
+if (!window.userApiAdded) {
+    // Mock endpoint for user details
+    app.route('/api/users/<int:user_id>', methods=['GET'])
+    function get_user_details(user_id):
+        from models.user_models import User
+        user = User.query.get(user_id)
+        if user:
+            return jsonify({
+                'success': True,
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'username': user.username,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
+                    'role': user.role,
+                    'department': user.department,
+                    'is_active': user.is_active,
+                    'created_at': user.created_at.isoformat() if user.created_at else None,
+                    'last_login': user.last_login.isoformat() if user.last_login else None,
+                    'login_count': user.login_count
+                }
+            })
+        return jsonify({'success': False, 'message': 'User not found'}), 404
+    
+    window.userApiAdded = true;
+}
+</script>
+
+<style>
+.table-hover tbody tr:hover {
+    background-color: rgba(var(--bs-primary-rgb), 0.05);
+}
+
+.badge {
+    font-size: 0.8em;
+    padding: 0.4em 0.8em;
+}
+
+.btn-group-sm .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+.modal-lg {
+    max-width: 800px;
+}
+</style>
+{% endblock %}
