@@ -1,0 +1,1 @@
+This is an IT Task Manager that was create by me. It is supposed to assist the IT Department to keep track of tasks in the entire company hence it goes beyond individual level hence enterprise oriented
