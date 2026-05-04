@@ -1,0 +1,72 @@
+# Create a proper .gitignore file
+@"
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Flask
+instance/
+.webassets-cache
+.env
+.DS_Store
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Backup files
+*.bak
+*.backup
+backups/
+
+# Uploads and static files
+uploads/
+static/reports/
+static/exports/
+
+# Environment variables
+.env
+.env.local
+
+# Secret keys
+config.py.bak
+*.secret
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Reports
+*.csv
+*.json
+*.xlsx
+
+# Migrations cache
+migrations/__pycache__/
+migrations/versions/__pycache__/
+"@ | Out-File -FilePath .gitignore -Encoding utf8

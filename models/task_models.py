@@ -13,7 +13,7 @@ class Task(BaseModel):
     description = db.Column(db.Text, nullable=False)
     
     # Classification
-    category = db.Column(db.String(100), nullable=False, index=True)  # FIXED: Added nullable=False
+    category = db.Column(db.String(100), nullable=False, index=True)
     subcategory = db.Column(db.String(100))
     priority = db.Column(db.String(20), nullable=False, index=True)
     complexity = db.Column(db.String(20), default='Medium')
@@ -75,27 +75,29 @@ class Task(BaseModel):
     tags = db.Column(db.JSON, default=list)
     is_public = db.Column(db.Boolean, default=True)
     completed_at = db.Column(db.DateTime)
+    started_at = db.Column(db.DateTime)
+    notes = db.Column(db.Text)
     
     # Relationships
     assigned_to_user = db.relationship('User', 
                                       foreign_keys=[assigned_to], 
                                       backref=db.backref('tasks_assigned_to_me', lazy='dynamic'),
-                                      lazy=True)
+                                      lazy='joined')
     
     assigned_by_user = db.relationship('User', 
                                       foreign_keys=[assigned_by], 
                                       backref=db.backref('tasks_assigned_by_me', lazy='dynamic'),
-                                      lazy=True)
+                                      lazy='joined')
     
     created_by_user = db.relationship('User', 
                                      foreign_keys=[created_by], 
                                      backref=db.backref('tasks_created_by_me', lazy='dynamic'),
-                                     lazy=True)
+                                     lazy='joined')
     
     closed_by_user = db.relationship('User', 
                                     foreign_keys=[closed_by], 
                                     backref=db.backref('tasks_closed_by_me', lazy='dynamic'),
-                                    lazy=True)
+                                    lazy='joined')
     
     def __init__(self, **kwargs):
         # Call parent constructor first
@@ -143,7 +145,9 @@ class Task(BaseModel):
         if self.priority in sla_hours:
             hours = sla_hours[self.priority]
             self.sla_level = self.priority
-            self.sla_due_date = datetime.utcnow() + timedelta(hours=hours)
+            # Use current datetime for SLA calculation
+            current_time = datetime.now()
+            self.sla_due_date = current_time + timedelta(hours=hours)
     
     @property
     def assigned_to_display(self):
@@ -151,6 +155,104 @@ class Task(BaseModel):
         if self.assigned_to_user:
             return self.assigned_to_user.full_name
         return "Unassigned"
+    
+    @property
+    def assigned_user_name(self):
+        """Get assigned user name safely - handles both loaded relationship and manual fetch"""
+        if self.assigned_to_user:
+            return self.assigned_to_user.full_name
+        elif self.assigned_to:
+            # Try to fetch the user if relationship not loaded
+            try:
+                from models.user_models import User
+                user = User.query.get(self.assigned_to)
+                return user.full_name if user else f"User ID: {self.assigned_to[:8]}"
+            except:
+                return f"User ID: {self.assigned_to[:8]}"
+        return "Unassigned"
+    
+    @property
+    def assigned_user_role(self):
+        """Get assigned user role safely"""
+        if self.assigned_to_user:
+            return self.assigned_to_user.role
+        elif self.assigned_to:
+            try:
+                from models.user_models import User
+                user = User.query.get(self.assigned_to)
+                return user.role if user else None
+            except:
+                return None
+        return None
+    
+    @property
+    def assigned_user_department(self):
+        """Get assigned user department safely"""
+        if self.assigned_to_user:
+            return self.assigned_to_user.department
+        elif self.assigned_to:
+            try:
+                from models.user_models import User
+                user = User.query.get(self.assigned_to)
+                return user.department if user else None
+            except:
+                return None
+        return None
+    
+    @property
+    def assigned_user_email(self):
+        """Get assigned user email safely"""
+        if self.assigned_to_user:
+            return self.assigned_to_user.email
+        elif self.assigned_to:
+            try:
+                from models.user_models import User
+                user = User.query.get(self.assigned_to)
+                return user.email if user else None
+            except:
+                return None
+        return None
+    
+    @property
+    def created_user_name(self):
+        """Get created user name safely"""
+        if self.created_by_user:
+            return self.created_by_user.full_name
+        elif self.created_by:
+            try:
+                from models.user_models import User
+                user = User.query.get(self.created_by)
+                return user.full_name if user else f"User ID: {self.created_by[:8]}"
+            except:
+                return f"User ID: {self.created_by[:8]}"
+        return "System"
+    
+    @property
+    def is_overdue(self):
+        """Check if task is overdue"""
+        if not self.due_date:
+            return False
+        from datetime import datetime
+        return self.due_date < datetime.now() and self.status in ['New', 'Assigned', 'In Progress']
+    
+    @property
+    def time_remaining(self):
+        """Get time remaining string"""
+        if not self.due_date:
+            return "No due date"
+        from datetime import datetime
+        if self.is_overdue:
+            return "Overdue"
+        
+        remaining = self.due_date - datetime.now()
+        if remaining.days > 0:
+            return f"{remaining.days} day(s)"
+        elif remaining.seconds > 3600:
+            return f"{remaining.seconds // 3600} hour(s)"
+        elif remaining.seconds > 60:
+            return f"{remaining.seconds // 60} minute(s)"
+        else:
+            return "Less than a minute"
     
     def to_dict(self):
         return {
@@ -165,17 +267,23 @@ class Task(BaseModel):
             'progress': self.progress,
             'assigned_to': self.assigned_to,
             'assigned_to_display': self.assigned_to_display,
+            'assigned_user_name': self.assigned_user_name,
+            'assigned_user_role': self.assigned_user_role,
+            'assigned_user_department': self.assigned_user_department,
             'department': self.department,
             'due_date': self.due_date.isoformat() if self.due_date else None,
             'sla_due_date': self.sla_due_date.isoformat() if self.sla_due_date else None,
             'sla_status': self.sla_status,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'created_by': self.created_by,
+            'created_user_name': self.created_user_name,
             'estimated_hours': self.estimated_hours,
             'actual_hours': self.actual_hours,
             'tags': self.tags,
             'is_public': self.is_public,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'is_overdue': self.is_overdue,
+            'time_remaining': self.time_remaining
         }
     
     def __repr__(self):
@@ -365,7 +473,7 @@ class WorkflowStep(BaseModel):
     assignee_type = db.Column(db.String(50), default='task_creator')
     estimated_duration = db.Column(db.Float)
     
-    # Relationship - FIXED: Changed backref name
+    # Relationship
     template = db.relationship('WorkflowTemplate', 
                               backref=db.backref('template_steps', 
                                                lazy='dynamic',

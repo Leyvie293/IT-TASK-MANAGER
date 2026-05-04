@@ -1,4 +1,4 @@
-# models/database.py - COMPLETE FIXED VERSION
+# models/database.py - COMPLETE FIXED VERSION - STORE DATES IN EAT
 import uuid
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
@@ -12,8 +12,11 @@ class BaseModel(db.Model):
     
     # Use UUID for ID - Use a callable function
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # IMPORTANT: created_at and updated_at now store EAT timestamps directly
+    # No UTC conversion - these are EAT naive datetimes
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
     
     def save(self):
         try:

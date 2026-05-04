@@ -1,4 +1,4 @@
-<!-- templates/reports/dashboard.html - FIXED VERSION with Data Accuracy Notes -->
+<!-- templates/reports/dashboard.html - FIXED VERSION with Data Accuracy Notes and All Time Option -->
 {% extends "base.html" %}
 
 {% block title %}Reports Dashboard - {{ app_name }}{% endblock %}
@@ -11,7 +11,9 @@
 <div class="btn-group">
     <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
         <i class="bi bi-calendar-range me-1"></i> 
-        {% if date_range == '7days' %}
+        {% if date_range == 'all' %}
+            All Time
+        {% elif date_range == '7days' %}
             Last 7 Days
         {% elif date_range == '90days' %}
             Last 90 Days
@@ -20,6 +22,8 @@
         {% endif %}
     </button>
     <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="?date_range=all">All Time</a></li>
+        <li><hr class="dropdown-divider"></li>
         <li><a class="dropdown-item" href="?date_range=7days">Last 7 Days</a></li>
         <li><a class="dropdown-item" href="?date_range=30days">Last 30 Days</a></li>
         <li><a class="dropdown-item" href="?date_range=90days">Last 90 Days</a></li>
@@ -63,12 +67,23 @@
         <div class="row align-items-center">
             <div class="col-md-8">
                 <i class="bi bi-calendar-event me-2"></i>
-                Showing data from <strong>{{ start_date|format_date }}</strong> to <strong>{{ end_date|format_date }}</strong>
+                Showing data from 
+                {% if date_range == 'all' %}
+                    <strong>All Time</strong> (entire history)
+                {% else %}
+                    <strong>{{ start_date|format_date }}</strong> to <strong>{{ end_date|format_date }}</strong>
+                {% endif %}
                 {% if date_range == '30days' or date_range == '7days' or date_range == '90days' %}
                 <br>
                 <small class="text-muted">
                     <i class="bi bi-info-circle me-1"></i>
                     Includes all tasks created within this date range (inclusive of end date)
+                </small>
+                {% elif date_range == 'all' %}
+                <br>
+                <small class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Showing all tasks regardless of creation date
                 </small>
                 {% endif %}
             </div>
@@ -89,6 +104,7 @@
                 <strong>No tasks found for this date range.</strong>
                 <ul class="mb-0 mt-1">
                     <li>Check if tasks were created within the selected date range</li>
+                    <li>Try selecting "All Time" to see all tasks</li>
                     <li>Verify date filters include today's date</li>
                     <li>Use the <a href="{{ url_for('debug_task_data_accuracy') }}" class="alert-link">Debug Data</a> tool to investigate</li>
                 </ul>
@@ -292,7 +308,7 @@
                                         {% else %}
                                         {{ dept.name }}
                                         {% endif %}
-                                    </td>
+                                     </td>
                                     <td>{{ dept.total_tasks }}</td>
                                     <td>
                                         <span class="badge bg-warning">{{ dept.open_tasks }}</span>
@@ -309,7 +325,7 @@
                                         </div>
                                         <small class="text-muted">{{ dept.completion_rate }}%</small>
                                     </td>
-                                </tr>
+                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -350,7 +366,7 @@
                                     <th>Completed</th>
                                     <th>Completion Rate</th>
                                     <th>Performance</th>
-                                </tr>
+                                 </tr>
                             </thead>
                             <tbody>
                                 {% for user_data in user_performance %}
@@ -419,6 +435,7 @@
                     <div class="text-center text-muted py-5">
                         <i class="bi bi-graph-up display-4 mb-3"></i>
                         <p>No trend data available</p>
+                        <small class="text-muted">Try selecting a different date range</small>
                     </div>
                     {% endif %}
                 </div>
@@ -444,7 +461,7 @@
                                     <th>Due Date</th>
                                     <th>Assigned To</th>
                                     <th>Priority</th>
-                                </tr>
+                                 </tr>
                             </thead>
                             <tbody>
                                 {% for task in overdue_tasks %}
@@ -502,7 +519,7 @@
                     <h6 class="m-0 font-weight-bold text-primary">
                         <i class="bi bi-shield-check me-2"></i>SLA Compliance Details
                     </h6>
-                    <a href="{{ url_for('report_sla_details') }}" class="btn btn-sm btn-outline-primary">
+                    <a href="{{ url_for('report_sla_details') }}?date_range={{ date_range }}" class="btn btn-sm btn-outline-primary">
                         View Detailed Report <i class="bi bi-arrow-right ms-1"></i>
                     </a>
                 </div>
@@ -570,16 +587,24 @@
                         <div class="col-md-6">
                             <h6><i class="bi bi-check-circle text-success me-2"></i>What's included:</h6>
                             <ul class="mb-0">
+                                {% if date_range == 'all' %}
+                                <li>All tasks regardless of creation date</li>
+                                <li>Complete task history from the entire system</li>
+                                {% else %}
                                 <li>All tasks created between {{ start_date|format_date }} and {{ end_date|format_date }}</li>
+                                {% endif %}
                                 <li>Tasks are filtered based on your user role and permissions</li>
+                                {% if date_range != 'all' %}
                                 <li>Date range includes entire days (00:00 to 23:59)</li>
+                                {% endif %}
                                 <li>Data is shown in EAT timezone</li>
                             </ul>
                         </div>
                         <div class="col-md-6">
                             <h6><i class="bi bi-question-circle text-warning me-2"></i>If data seems incorrect:</h6>
                             <ul class="mb-0">
-                                <li>Check the date range matches when tasks were created</li>
+                                <li>Check if you're in "All Time" or a specific date range</li>
+                                <li>Try selecting "All Time" to see all tasks</li>
                                 <li>Verify your role/department permissions</li>
                                 <li>Refresh the page to get latest data</li>
                                 <li>Use the <strong>Debug Data</strong> tool for detailed analysis</li>
@@ -605,13 +630,13 @@
                     <div class="mb-3">
                         <label for="start_date" class="form-label">Start Date</label>
                         <input type="date" class="form-control" id="start_date" name="start_date" 
-                               value="{{ start_date|format_date('%Y-%m-%d') }}" required>
+                               value="{{ start_date|format_date('%Y-%m-%d') if start_date != 'All Time' else '' }}" required>
                         <small class="text-muted">Inclusive start date (00:00:00)</small>
                     </div>
                     <div class="mb-3">
                         <label for="end_date" class="form-label">End Date</label>
                         <input type="date" class="form-control" id="end_date" name="end_date" 
-                               value="{{ end_date|format_date('%Y-%m-%d') }}" required>
+                               value="{{ end_date|format_date('%Y-%m-%d') if end_date != 'All Time' else '' }}" required>
                         <small class="text-muted">Inclusive end date (23:59:59)</small>
                     </div>
                     <input type="hidden" name="date_range" value="custom">
@@ -789,8 +814,15 @@
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(today.getDate() - 30);
         
-        document.getElementById('start_date').valueAsDate = thirtyDaysAgo;
-        document.getElementById('end_date').valueAsDate = today;
+        const startDateInput = document.getElementById('start_date');
+        const endDateInput = document.getElementById('end_date');
+        
+        if (startDateInput && (!startDateInput.value || startDateInput.value === '')) {
+            startDateInput.valueAsDate = thirtyDaysAgo;
+        }
+        if (endDateInput && (!endDateInput.value || endDateInput.value === '')) {
+            endDateInput.valueAsDate = today;
+        }
         
         // Add data refresh reminder
         setTimeout(() => {
@@ -804,7 +836,10 @@
             
             // Only show after 5 minutes
             setTimeout(() => {
-                document.querySelector('.container-fluid').appendChild(refreshAlert);
+                const container = document.querySelector('.container-fluid');
+                if (container && !document.querySelector('.alert-warning')) {
+                    container.insertBefore(refreshAlert, container.firstChild);
+                }
             }, 300000); // 5 minutes
         }, 1000);
     });

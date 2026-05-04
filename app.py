@@ -1,15 +1,17 @@
-# app.py - COMPLETE FIXED VERSION WITH EAT TIMEZONE FIX
-# FIXED: All time displays now use EAT timezone consistently
-# FIXED: Database storage uses UTC, but all displays use EAT
-# FIXED: Created timestamps now show correct EAT time (not UTC+3)
-# FIXED: time_ago filter shows correct EAT time differences
+# app.py - COMPLETE FIXED VERSION - STORE DATES IN EAT
+# FIXED: All datetime storage now uses EAT timezone directly
+# FIXED: No UTC conversion - store dates in EAT
+# FIXED: All time displays use EAT timezone consistently
+# FIXED: Database storage uses EAT timestamps (not UTC)
+# FIXED: Created timestamps now show correct EAT time (no conversion needed)
+# FIXED: Reports Dashboard now supports "All Time" date range
 
 from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, abort, send_file, Response, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_migrate import Migrate
 from flask_bcrypt import Bcrypt
 from flask_mail import Mail
-from config import DevelopmentConfig, get_eat_now, format_eat_datetime, format_eat_date, calculate_sla_due_date
+from config import DevelopmentConfig, calculate_sla_due_date
 import os
 import sys
 from datetime import datetime, timedelta, date
@@ -38,126 +40,95 @@ def create_app(config_class=DevelopmentConfig):
     bcrypt = Bcrypt(app)
     
     # ====================================================================
-    # EAT TIMEZONE SETUP - FIXED FOR CORRECT DISPLAY
+    # EAT TIMEZONE SETUP - STORE DIRECTLY IN EAT
     # ====================================================================
     EAT = pytz.timezone('Africa/Nairobi')  # East Africa Time
     
     def get_eat_time():
-        """Get current time in East Africa Time (EAT)"""
+        """Get current time in East Africa Time (EAT) - STORED DIRECTLY"""
         now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
-        return now_utc.astimezone(EAT)
+        now_eat = now_utc.astimezone(EAT)
+        # Remove timezone for storage - store as naive EAT datetime
+        return now_eat.replace(tzinfo=None)
     
     def convert_to_eat(dt):
-        """Convert any datetime to EAT - FIXED FOR DISPLAY"""
+        """Convert any datetime to EAT - for display only"""
         if dt is None:
             return None
         
         # If it's already a timezone-aware datetime
         if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
-            return dt.astimezone(EAT)
+            return dt.astimezone(EAT).replace(tzinfo=None)
         
-        # If it's a naive datetime, assume it's UTC (as stored in database)
+        # If it's a naive datetime, assume it's already EAT (as stored)
         if isinstance(dt, datetime) and dt.tzinfo is None:
-            dt = pytz.utc.localize(dt)
-            return dt.astimezone(EAT)
+            return dt  # Already in EAT, no conversion needed
         
         # If it's a date object
         if isinstance(dt, date) and not isinstance(dt, datetime):
             dt = datetime.combine(dt, datetime.min.time())
-            dt = EAT.localize(dt)
             return dt
         
         return dt
     
     def convert_to_utc(dt):
-        """Convert EAT datetime to UTC for database storage"""
+        """Convert EAT datetime to UTC - ONLY FOR DISPLAY IF NEEDED"""
         if dt is None:
             return None
         
-        # If naive, assume it's EAT
+        # If naive, assume it's EAT and convert to UTC
         if isinstance(dt, datetime) and dt.tzinfo is None:
-            dt = EAT.localize(dt)
+            dt_eat = EAT.localize(dt)
+            dt_utc = dt_eat.astimezone(pytz.utc)
+            return dt_utc.replace(tzinfo=None)  # Return naive UTC
         
-        return dt.astimezone(pytz.utc).replace(tzinfo=None)  # Store as naive UTC
+        # If aware
+        if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+            return dt.astimezone(pytz.utc).replace(tzinfo=None)
+        
+        return dt
     
     def format_datetime_eat(dt, format_str='%Y-%m-%d %H:%M:%S'):
-        """Format datetime for display in EAT - FIXED VERSION"""
+        """Format datetime for display in EAT - SIMPLIFIED"""
         if not dt:
             return ''
         
-        dt_eat = convert_to_eat(dt)
-        return dt_eat.strftime(format_str)
+        # dt is already stored as EAT naive datetime
+        return dt.strftime(format_str)
     
     def format_date_eat(dt, format_str='%Y-%m-%d'):
-        """Format date for display in EAT"""
+        """Format date for display in EAT - SIMPLIFIED"""
         if not dt:
             return ''
         
-        dt_eat = convert_to_eat(dt)
-        return dt_eat.strftime(format_str)
+        # dt is already stored as EAT naive datetime
+        if isinstance(dt, datetime):
+            return dt.strftime(format_str)
+        if isinstance(dt, date):
+            return dt.strftime(format_str)
+        return str(dt)
     
     def compare_datetimes_tz_safe(dt1, dt2):
         """
-        Safely compare two datetimes regardless of timezone awareness.
-        Converts both to EAT naive datetimes for comparison.
+        Safely compare two datetimes - both assumed to be EAT naive
         """
         if dt1 is None or dt2 is None:
             return False
         
-        # Convert both to EAT naive datetimes for comparison
-        def to_eat_naive(dt):
-            if dt is None:
-                return None
-            
-            # If it's already a datetime object
-            if hasattr(dt, 'tzinfo'):
-                if dt.tzinfo is None:
-                    # Naive datetime - assume it's UTC and convert to EAT
-                    dt_utc = pytz.utc.localize(dt)
-                    dt_eat = dt_utc.astimezone(EAT)
-                    return dt_eat.replace(tzinfo=None)
-                else:
-                    # Aware datetime - convert to EAT then make naive
-                    dt_eat = dt.astimezone(EAT)
-                    return dt_eat.replace(tzinfo=None)
-            elif isinstance(dt, date):
-                # If it's a date object, convert to datetime at start of day in EAT
-                dt_eat = EAT.localize(datetime.combine(dt, datetime.min.time()))
-                return dt_eat.replace(tzinfo=None)
-            else:
-                # Not a datetime object, can't compare
-                return None
-        
-        dt1_eat = to_eat_naive(dt1)
-        dt2_eat = to_eat_naive(dt2)
-        
-        if dt1_eat is None or dt2_eat is None:
-            return False
-        
-        return dt1_eat < dt2_eat
+        # Both are already stored as EAT naive datetimes
+        return dt1 < dt2
     
     def get_overdue_filter(column, current_time):
         """
         Create a SQLAlchemy filter for overdue tasks that works in queries.
-        Uses EAT timezone for comparison.
+        Both column and current_time are EAT naive datetimes.
         """
         if column is None:
             return False
         
-        # Convert current_time to EAT naive for comparison
-        # Database stores UTC naive datetimes, but we compare in EAT
-        if current_time.tzinfo is not None:
-            current_eat_naive = current_time.astimezone(EAT).replace(tzinfo=None)
-        else:
-            # If naive, assume it's already in EAT
-            current_eat_naive = current_time
-        
-        # We need to convert the database UTC time to EAT for comparison
-        # This is done by adding 3 hours (UTC to EAT conversion)
-        # EAT is UTC+3
-        from sqlalchemy import text
+        # Both are EAT naive - direct comparison works
         return and_(
-            func.datetime(column, '+3 hours') < current_eat_naive,
+            column < current_time,
             column.isnot(None)
         )
     
@@ -170,7 +141,7 @@ def create_app(config_class=DevelopmentConfig):
     
     print(f"Project root: {project_root}")
     print(f"Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
-    print(f"Timezone: EAT (Africa/Nairobi)")
+    print(f"Timezone: EAT (Africa/Nairobi) - STORING DIRECTLY IN EAT")
     print(f"Secret Key set: {'Yes' if app.config.get('SECRET_KEY') else 'No'}")
     
     # Ensure required directories exist
@@ -261,7 +232,7 @@ def create_app(config_class=DevelopmentConfig):
                     print(f"Email:    admin@rileyfalcon.com")
                     print(f"Password: Admin@123")
                     print(f"Role:     Administrator")
-                    print(f"Timezone: EAT (Africa/Nairobi)")
+                    print(f"Timezone: EAT (Africa/Nairobi) - STORED DIRECTLY")
                     print("=" * 40)
                     print("\n📋 You can now login with these credentials")
                     print("=" * 60 + "\n")
@@ -275,12 +246,12 @@ def create_app(config_class=DevelopmentConfig):
     create_default_admin_if_needed()
     
     # ====================================================================
-    # CUSTOM JINJA2 FILTERS - UPDATED FOR EAT - ALL TIME DISPLAYS IN EAT
+    # CUSTOM JINJA2 FILTERS - SIMPLIFIED FOR EAT STORAGE
     # ====================================================================
     
     @app.template_filter('format_datetime')
     def format_datetime_filter(value, format='%Y-%m-%d %H:%M'):
-        """Format datetime object in EAT timezone - FIXED"""
+        """Format datetime object - stored in EAT, no conversion needed"""
         if not value:
             return ''
         try:
@@ -290,7 +261,7 @@ def create_app(config_class=DevelopmentConfig):
     
     @app.template_filter('format_date')
     def format_date_filter(value, format='%Y-%m-%d'):
-        """Format date object in EAT timezone"""
+        """Format date object - stored in EAT, no conversion needed"""
         if not value:
             return ''
         try:
@@ -300,18 +271,16 @@ def create_app(config_class=DevelopmentConfig):
     
     @app.template_filter('time_ago')
     def time_ago_filter(value):
-        """Display time ago from datetime in EAT - FIXED"""
+        """Display time ago from datetime - both in EAT, direct comparison"""
         if not value:
             return ''
         
         try:
-            # Convert input value to EAT timezone
-            value_eat = convert_to_eat(value)
+            # Both value and now_eat are EAT naive datetimes
+            value_eat = value  # Already in EAT
+            now_eat = get_eat_time()  # EAT naive
             
-            # Get current time in EAT
-            now_eat = get_eat_time()
-            
-            # Calculate difference in EAT timezone
+            # Calculate difference
             diff = now_eat - value_eat
             
             # Handle negative differences (future times)
@@ -345,7 +314,7 @@ def create_app(config_class=DevelopmentConfig):
     
     @app.template_filter('exact_time_eat')
     def exact_time_filter(value, format='%Y-%m-%d %H:%M:%S'):
-        """Display exact time in EAT instead of time ago"""
+        """Display exact time - stored in EAT, no conversion needed"""
         if not value:
             return ''
         try:
@@ -355,27 +324,11 @@ def create_app(config_class=DevelopmentConfig):
     
     @app.template_filter('format_eat')
     def format_eat_filter(value, format='%Y-%m-%d %H:%M:%S %Z'):
-        """Format datetime specifically for EAT display"""
+        """Format datetime for EAT display - no conversion needed"""
+        if format.endswith('%Z'):
+            value_str = format_datetime_eat(value, format.replace(' %Z', ''))
+            return f"{value_str} EAT"
         return format_datetime_eat(value, format)
-    
-    @app.template_filter('is_overdue')
-    def is_overdue_filter(task):
-        """Check if task is overdue (in EAT) - For template use only"""
-        if not task.due_date:
-            return False
-        
-        # Use the safe comparison function
-        current_time = get_eat_time()
-        
-        # Make sure current_time is timezone-aware in EAT
-        if current_time.tzinfo is None:
-            current_time = EAT.localize(current_time)
-        
-        # Convert task.due_date to EAT for comparison
-        task_due_eat = convert_to_eat(task.due_date)
-        
-        # Compare in EAT timezone
-        return task_due_eat < current_time and task.status in ['New', 'Assigned', 'In Progress']
     
     @app.template_filter('nl2br')
     def nl2br_filter(value):
@@ -412,7 +365,7 @@ def create_app(config_class=DevelopmentConfig):
     def load_user(user_id):
         from models.user_models import User
         try:
-            return User.query.filter_by(id=str(user_id)).first()  # FIXED: Use string comparison
+            return User.query.filter_by(id=str(user_id)).first()
         except Exception as e:
             print(f"Error loading user {user_id}: {e}")
             return None
@@ -555,7 +508,7 @@ def create_app(config_class=DevelopmentConfig):
             return render_template('setup/first_time.html')
     
     # ====================================================================
-    # USER MANAGEMENT ROUTES - WITH EAT - FIXED FOR NO USERNAME FIELD
+    # USER MANAGEMENT ROUTES - WITH EAT STORAGE
     # ====================================================================
     
     @app.route('/admin/users', methods=['GET'])
@@ -953,7 +906,7 @@ def create_app(config_class=DevelopmentConfig):
             return redirect(url_for('manage_users'))
     
     # ====================================================================
-    # PROFILE MANAGEMENT ROUTES - WITH EAT
+    # PROFILE MANAGEMENT ROUTES - WITH EAT STORAGE
     # ====================================================================
     
     @app.route('/auth/profile', methods=['GET'])
@@ -963,21 +916,21 @@ def create_app(config_class=DevelopmentConfig):
             from models.task_models import Task
             from models.user_models import ActivityLog
             
-            user_id_str = str(current_user.id)  # FIXED: Convert to string
+            user_id_str = str(current_user.id)
             
-            total_tasks = Task.query.filter(Task.assigned_to == user_id_str).count()  # FIXED: String comparison
+            total_tasks = Task.query.filter(Task.assigned_to == user_id_str).count()
             completed_tasks = Task.query.filter(
-                Task.assigned_to == user_id_str,  # FIXED: String comparison
+                Task.assigned_to == user_id_str,
                 Task.status == 'Resolved'
             ).count()
             pending_tasks = Task.query.filter(
-                Task.assigned_to == user_id_str,  # FIXED: String comparison
+                Task.assigned_to == user_id_str,
                 Task.status.in_(['New', 'Assigned', 'In Progress'])
             ).count()
             # Use get_overdue_filter for queries
             overdue_tasks = Task.query.filter(
                 get_overdue_filter(Task.due_date, get_eat_time()),
-                Task.assigned_to == user_id_str,  # FIXED: String comparison
+                Task.assigned_to == user_id_str,
                 Task.status.in_(['New', 'Assigned', 'In Progress'])
             ).count()
             
@@ -1154,7 +1107,7 @@ def create_app(config_class=DevelopmentConfig):
             return redirect(url_for('manage_departments'))
     
     # ====================================================================
-    # REPORT ROUTES - WITH EAT - FIXED DATA ACCURACY ISSUES
+    # REPORT ROUTES - WITH EAT STORAGE - SIMPLIFIED WITH "ALL TIME" OPTION
     # ====================================================================
     
     @app.route('/reports/dashboard')
@@ -1173,13 +1126,19 @@ def create_app(config_class=DevelopmentConfig):
             print('='*60)
             
             end_date = get_eat_time()
-            start_date = end_date - timedelta(days=30)
-            
             date_range = request.args.get('date_range', '30days')
-            if date_range == '7days':
+            
+            # Handle date range selection - including "All Time" option
+            if date_range == 'all':
+                # No date filter - show all tasks
+                start_date = None
+                print(f"DEBUG REPORTS: All time view - no date filter")
+            elif date_range == '7days':
                 start_date = end_date - timedelta(days=7)
+                start_date = start_date.replace(hour=0, minute=0, second=0)
             elif date_range == '90days':
                 start_date = end_date - timedelta(days=90)
+                start_date = start_date.replace(hour=0, minute=0, second=0)
             elif date_range == 'custom':
                 start_str = request.args.get('start_date')
                 end_str = request.args.get('end_date')
@@ -1187,20 +1146,26 @@ def create_app(config_class=DevelopmentConfig):
                     try:
                         start_naive = datetime.strptime(start_str, '%Y-%m-%d')
                         end_naive = datetime.strptime(end_str, '%Y-%m-%d')
-                        start_date = EAT.localize(start_naive.replace(hour=0, minute=0, second=0))
-                        end_date = EAT.localize(end_naive.replace(hour=23, minute=59, second=59))
+                        start_date = start_naive.replace(hour=0, minute=0, second=0)
+                        end_date = end_naive.replace(hour=23, minute=59, second=59)
                     except ValueError:
                         flash('Invalid date format. Using default range.', 'warning')
+                        start_date = end_date - timedelta(days=30)
+                        start_date = start_date.replace(hour=0, minute=0, second=0)
+                else:
+                    start_date = end_date - timedelta(days=30)
+                    start_date = start_date.replace(hour=0, minute=0, second=0)
+            else:  # 30days default
+                start_date = end_date - timedelta(days=30)
+                start_date = start_date.replace(hour=0, minute=0, second=0)
             
-            # Convert to UTC for database query (database stores UTC)
-            # CRITICAL FIX: Add buffer to end_date to include tasks created "today"
-            utc_end = convert_to_utc(end_date.replace(hour=23, minute=59, second=59, microsecond=999999))
-            utc_start = convert_to_utc(start_date.replace(hour=0, minute=0, second=0, microsecond=0))
+            if date_range != 'all':
+                end_date = end_date.replace(hour=23, minute=59, second=59)
+                print(f"DEBUG REPORTS: Date range EAT: {format_datetime_eat(start_date)} to {format_datetime_eat(end_date)}")
+            else:
+                print(f"DEBUG REPORTS: All Time - no date range filter")
             
-            print(f"DEBUG REPORTS: Date range EAT: {format_datetime_eat(start_date)} to {format_datetime_eat(end_date)}")
-            print(f"DEBUG REPORTS: Date range UTC: {utc_start} to {utc_end}")
-            
-            # FIXED: Use proper query filtering based on user role
+            # Build base query based on user role
             if current_user.role == 'Admin':
                 # Admin sees all tasks
                 base_task_query = Task.query
@@ -1218,23 +1183,26 @@ def create_app(config_class=DevelopmentConfig):
                 base_task_query = Task.query.filter(Task.assigned_to == user_id_str)
                 print(f"DEBUG REPORTS: Regular user view - assigned to: {user_id_str}")
             
-            # Create filtered query for date range
-            # CRITICAL FIX: Use inclusive date filtering
-            task_query = base_task_query.filter(
-                Task.created_at >= utc_start,
-                Task.created_at <= utc_end
-            )
+            # Apply date filter if not 'all'
+            if start_date and date_range != 'all':
+                task_query = base_task_query.filter(
+                    Task.created_at >= start_date,
+                    Task.created_at <= end_date
+                )
+            else:
+                task_query = base_task_query
+                print(f"DEBUG REPORTS: All Time - showing all tasks without date filter")
             
             # DEBUG: Check how many tasks match the filter
             task_count = task_query.count()
-            print(f"DEBUG REPORTS: Tasks in date range: {task_count}")
+            total_db_tasks = base_task_query.count()
+            print(f"DEBUG REPORTS: Tasks in date range: {task_count} out of {total_db_tasks} total tasks")
             
             # Get sample of recent tasks for debugging
-            recent_sample = Task.query.order_by(Task.created_at.desc()).limit(5).all()
+            recent_sample = base_task_query.order_by(Task.created_at.desc()).limit(5).all()
             print("DEBUG REPORTS: Recent tasks sample:")
             for task in recent_sample:
-                print(f"  - ID: {task.id}, Created: {task.created_at}, "
-                      f"EAT: {format_datetime_eat(task.created_at)}, Title: {task.title[:30]}...")
+                print(f"  - ID: {task.id}, Created: {task.created_at}, Title: {task.title[:30]}...")
             
             # Calculate basic stats
             total_tasks = task_count
@@ -1301,11 +1269,14 @@ def create_app(config_class=DevelopmentConfig):
                 departments = [dept[0] for dept in dept_query if dept[0]]
                 
                 for dept in departments:
-                    dept_tasks = Task.query.filter(
-                        Task.department == dept,
-                        Task.created_at >= utc_start,
-                        Task.created_at <= utc_end
-                    )
+                    if start_date and date_range != 'all':
+                        dept_tasks = Task.query.filter(
+                            Task.department == dept,
+                            Task.created_at >= start_date,
+                            Task.created_at <= end_date
+                        )
+                    else:
+                        dept_tasks = Task.query.filter(Task.department == dept)
                     
                     dept_total = dept_tasks.count()
                     dept_open = dept_tasks.filter(Task.status.in_(['New', 'Assigned', 'In Progress'])).count()
@@ -1324,11 +1295,14 @@ def create_app(config_class=DevelopmentConfig):
                 if current_user.department:
                     departments = [current_user.department]
                     
-                    dept_tasks = Task.query.filter(
-                        Task.department == current_user.department,
-                        Task.created_at >= utc_start,
-                        Task.created_at <= utc_end
-                    )
+                    if start_date and date_range != 'all':
+                        dept_tasks = Task.query.filter(
+                            Task.department == current_user.department,
+                            Task.created_at >= start_date,
+                            Task.created_at <= end_date
+                        )
+                    else:
+                        dept_tasks = Task.query.filter(Task.department == current_user.department)
                     
                     dept_total = dept_tasks.count()
                     dept_open = dept_tasks.filter(Task.status.in_(['New', 'Assigned', 'In Progress'])).count()
@@ -1349,11 +1323,14 @@ def create_app(config_class=DevelopmentConfig):
                 users = User.query.filter_by(is_active=True).all()
                 for user in users:
                     user_id_str = str(user.id)
-                    user_tasks = Task.query.filter(
-                        Task.assigned_to == user_id_str,
-                        Task.created_at >= utc_start,
-                        Task.created_at <= utc_end
-                    )
+                    if start_date and date_range != 'all':
+                        user_tasks = Task.query.filter(
+                            Task.assigned_to == user_id_str,
+                            Task.created_at >= start_date,
+                            Task.created_at <= end_date
+                        )
+                    else:
+                        user_tasks = Task.query.filter(Task.assigned_to == user_id_str)
                     
                     assigned_count = user_tasks.count()
                     completed_count = user_tasks.filter_by(status='Resolved').count()
@@ -1373,12 +1350,18 @@ def create_app(config_class=DevelopmentConfig):
                     ).all()
                     for user in users:
                         user_id_str = str(user.id)
-                        user_tasks = Task.query.filter(
-                            Task.assigned_to == user_id_str,
-                            Task.department == current_user.department,
-                            Task.created_at >= utc_start,
-                            Task.created_at <= utc_end
-                        )
+                        if start_date and date_range != 'all':
+                            user_tasks = Task.query.filter(
+                                Task.assigned_to == user_id_str,
+                                Task.department == current_user.department,
+                                Task.created_at >= start_date,
+                                Task.created_at <= end_date
+                            )
+                        else:
+                            user_tasks = Task.query.filter(
+                                Task.assigned_to == user_id_str,
+                                Task.department == current_user.department
+                            )
                         
                         assigned_count = user_tasks.count()
                         completed_count = user_tasks.filter_by(status='Resolved').count()
@@ -1393,11 +1376,14 @@ def create_app(config_class=DevelopmentConfig):
             else:
                 # Regular user - only show themselves
                 user_id_str = str(current_user.id)
-                user_tasks = Task.query.filter(
-                    Task.assigned_to == user_id_str,
-                    Task.created_at >= utc_start,
-                    Task.created_at <= utc_end
-                )
+                if start_date and date_range != 'all':
+                    user_tasks = Task.query.filter(
+                        Task.assigned_to == user_id_str,
+                        Task.created_at >= start_date,
+                        Task.created_at <= end_date
+                    )
+                else:
+                    user_tasks = Task.query.filter(Task.assigned_to == user_id_str)
                 
                 assigned_count = user_tasks.count()
                 completed_count = user_tasks.filter_by(status='Resolved').count()
@@ -1414,31 +1400,38 @@ def create_app(config_class=DevelopmentConfig):
             user_performance.sort(key=lambda x: x['completion_rate'], reverse=True)
             user_performance = user_performance[:10]
             
-            # Monthly trend (last 6 months)
+            # Monthly trend (last 6 months) - only if date_range is not 'all'
             monthly_trend = []
-            for i in range(5, -1, -1):
-                month_start = (end_date.replace(day=1) - timedelta(days=i*30)).replace(day=1, hour=0, minute=0, second=0)
-                month_end = (month_start + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0) - timedelta(seconds=1)
-                
-                month_start_utc = convert_to_utc(month_start)
-                month_end_utc = convert_to_utc(month_end)
-                
-                month_tasks = base_task_query.filter(
-                    Task.created_at >= month_start_utc,
-                    Task.created_at <= month_end_utc
-                )
-                
-                tasks_created = month_tasks.count()
-                tasks_completed = month_tasks.filter_by(status='Resolved').count()
-                
-                monthly_trend.append({
-                    'month': month_start.strftime('%b %Y'),
-                    'tasks_created': tasks_created,
-                    'tasks_completed': tasks_completed
-                })
+            if date_range != 'all':
+                for i in range(5, -1, -1):
+                    month_start = (end_date.replace(day=1) - timedelta(days=i*30)).replace(day=1, hour=0, minute=0, second=0)
+                    month_end = (month_start + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0) - timedelta(seconds=1)
+                    
+                    if start_date and date_range != 'all':
+                        month_tasks = base_task_query.filter(
+                            Task.created_at >= month_start,
+                            Task.created_at <= month_end
+                        )
+                    else:
+                        month_tasks = base_task_query.filter(
+                            Task.created_at >= month_start,
+                            Task.created_at <= month_end
+                        )
+                    
+                    tasks_created = month_tasks.count()
+                    tasks_completed = month_tasks.filter_by(status='Resolved').count()
+                    
+                    monthly_trend.append({
+                        'month': month_start.strftime('%b %Y'),
+                        'tasks_created': tasks_created,
+                        'tasks_completed': tasks_completed
+                    })
             
             print(f"DEBUG REPORTS: Returning data - Total tasks: {total_tasks}")
-            print(f"DEBUG REPORTS: Date range displayed: {format_date_eat(start_date)} to {format_date_eat(end_date)}")
+            if start_date:
+                print(f"DEBUG REPORTS: Date range displayed: {format_date_eat(start_date)} to {format_date_eat(end_date)}")
+            else:
+                print(f"DEBUG REPORTS: Date range displayed: All Time")
             
             return render_template('reports/dashboard.html',
                                 total_tasks=total_tasks,
@@ -1457,8 +1450,8 @@ def create_app(config_class=DevelopmentConfig):
                                 department_stats=department_stats,
                                 user_performance=user_performance,
                                 monthly_trend=monthly_trend,
-                                start_date=format_date_eat(start_date),
-                                end_date=format_date_eat(end_date),
+                                start_date=format_date_eat(start_date) if start_date else 'All Time',
+                                end_date=format_date_eat(end_date) if date_range != 'all' else 'All Time',
                                 date_range=date_range,
                                 now=get_eat_time())
             
@@ -1470,7 +1463,7 @@ def create_app(config_class=DevelopmentConfig):
     
     @app.route('/reports/sla')
     @login_required
-    @role_required('Admin', 'Supervisor')  # Allow both Admin and Supervisor
+    @role_required('Admin', 'Supervisor')
     def report_sla_details():
         try:
             from models.task_models import Task
@@ -1495,36 +1488,48 @@ def create_app(config_class=DevelopmentConfig):
             # ============================================================
             
             end_date = get_eat_time()
-            if date_range == '7days':
+            if date_range == 'all':
+                # No date filter - show all tasks
+                start_date = None
+            elif date_range == '7days':
                 start_date = end_date - timedelta(days=7)
+                start_date = start_date.replace(hour=0, minute=0, second=0)
             elif date_range == '90days':
                 start_date = end_date - timedelta(days=90)
+                start_date = start_date.replace(hour=0, minute=0, second=0)
             else:
                 start_date = end_date - timedelta(days=30)
+                start_date = start_date.replace(hour=0, minute=0, second=0)
             
-            utc_end = convert_to_utc(end_date.replace(hour=23, minute=59, second=59))
-            utc_start = convert_to_utc(start_date.replace(hour=0, minute=0, second=0))
+            if date_range != 'all':
+                end_date = end_date.replace(hour=23, minute=59, second=59)
             
-            # ============================================================
-            # MODIFIED: Apply department restriction for supervisors
-            # ============================================================
+            # Build query based on user role and date range
             if current_user.role == 'Supervisor':
-                query = Task.query.filter(
-                    Task.sla_due_date.isnot(None),
-                    Task.created_at >= utc_start,
-                    Task.created_at <= utc_end,
-                    Task.department == current_user.department  # Supervisor only sees their department
-                )
+                if start_date and date_range != 'all':
+                    query = Task.query.filter(
+                        Task.sla_due_date.isnot(None),
+                        Task.created_at >= start_date,
+                        Task.created_at <= end_date,
+                        Task.department == current_user.department
+                    )
+                else:
+                    query = Task.query.filter(
+                        Task.sla_due_date.isnot(None),
+                        Task.department == current_user.department
+                    )
             else:
-                query = Task.query.filter(
-                    Task.sla_due_date.isnot(None),
-                    Task.created_at >= utc_start,
-                    Task.created_at <= utc_end
-                )
+                if start_date and date_range != 'all':
+                    query = Task.query.filter(
+                        Task.sla_due_date.isnot(None),
+                        Task.created_at >= start_date,
+                        Task.created_at <= end_date
+                    )
+                else:
+                    query = Task.query.filter(Task.sla_due_date.isnot(None))
                 
                 if department and department != 'all':
                     query = query.filter_by(department=department)
-            # ============================================================
             
             sla_tasks = query.order_by(Task.created_at.desc()).all()
             
@@ -1532,15 +1537,11 @@ def create_app(config_class=DevelopmentConfig):
             for task in sla_tasks:
                 if task.sla_due_date and task.completed_at:
                     expected_sla_date = calculate_sla_due_date(task.priority, task.created_at)
-                    # FIXED: Use compare_datetimes_tz_safe for safe comparison
-                    sla_met = compare_datetimes_tz_safe(task.completed_at, expected_sla_date)
+                    # Direct comparison - both are EAT naive
+                    sla_met = task.completed_at <= expected_sla_date
                     
                     if task.completed_at and task.sla_due_date:
-                        # Convert both to EAT for calculation
-                        completed_eat = convert_to_eat(task.completed_at)
-                        sla_due_eat = convert_to_eat(task.sla_due_date)
-                        
-                        hours_difference = (completed_eat - sla_due_eat).total_seconds() / 3600
+                        hours_difference = (task.completed_at - task.sla_due_date).total_seconds() / 3600
                     else:
                         hours_difference = 0
                     
@@ -1558,9 +1559,7 @@ def create_app(config_class=DevelopmentConfig):
             elif sla_status == 'missed':
                 tasks_analyzed = [t for t in tasks_analyzed if not t['sla_met']]
             
-            # ============================================================
-            # MODIFIED: Department breakdown based on user role
-            # ============================================================
+            # Department breakdown based on user role
             if current_user.role == 'Admin':
                 departments = db.session.query(Task.department).distinct().all()
                 dept_list = [dept[0] for dept in departments if dept[0]]
@@ -1571,23 +1570,35 @@ def create_app(config_class=DevelopmentConfig):
             dept_breakdown = []
             for dept in dept_list:
                 if current_user.role == 'Supervisor':
-                    dept_tasks = Task.query.filter(
-                        Task.department == dept,
-                        Task.sla_due_date.isnot(None),
-                        Task.created_at >= utc_start,
-                        Task.created_at <= utc_end
-                    ).all()
+                    if start_date and date_range != 'all':
+                        dept_tasks = Task.query.filter(
+                            Task.department == dept,
+                            Task.sla_due_date.isnot(None),
+                            Task.created_at >= start_date,
+                            Task.created_at <= end_date
+                        ).all()
+                    else:
+                        dept_tasks = Task.query.filter(
+                            Task.department == dept,
+                            Task.sla_due_date.isnot(None)
+                        ).all()
                 else:
-                    dept_tasks = Task.query.filter(
-                        Task.department == dept,
-                        Task.sla_due_date.isnot(None),
-                        Task.created_at >= utc_start,
-                        Task.created_at <= utc_end
-                    ).all()
+                    if start_date and date_range != 'all':
+                        dept_tasks = Task.query.filter(
+                            Task.department == dept,
+                            Task.sla_due_date.isnot(None),
+                            Task.created_at >= start_date,
+                            Task.created_at <= end_date
+                        ).all()
+                    else:
+                        dept_tasks = Task.query.filter(
+                            Task.department == dept,
+                            Task.sla_due_date.isnot(None)
+                        ).all()
                 
                 if dept_tasks:
                     met_count = sum(1 for task in dept_tasks 
-                                  if task.completed_at and task.sla_due_date and compare_datetimes_tz_safe(task.completed_at, task.sla_due_date))
+                                  if task.completed_at and task.sla_due_date and task.completed_at <= task.sla_due_date)
                     total_count = len(dept_tasks)
                     compliance_rate = round((met_count / total_count * 100) if total_count > 0 else 0, 1)
                     
@@ -1603,24 +1614,20 @@ def create_app(config_class=DevelopmentConfig):
             
             total_sla_tasks = len(sla_tasks)
             met_sla = sum(1 for task in sla_tasks 
-                         if task.completed_at and task.sla_due_date and compare_datetimes_tz_safe(task.completed_at, task.sla_due_date))
+                         if task.completed_at and task.sla_due_date and task.completed_at <= task.sla_due_date)
             missed_sla = total_sla_tasks - met_sla
             overall_compliance = round((met_sla / total_sla_tasks * 100) if total_sla_tasks > 0 else 0, 1)
             
             time_diffs = []
             for task in sla_tasks:
                 if task.completed_at and task.sla_due_date:
-                    # Convert both to EAT for calculation
-                    completed_eat = convert_to_eat(task.completed_at)
-                    sla_due_eat = convert_to_eat(task.sla_due_date)
-                    
-                    diff = (completed_eat - sla_due_eat).total_seconds() / 3600
+                    diff = (task.completed_at - task.sla_due_date).total_seconds() / 3600
                     time_diffs.append(diff)
             
             avg_time_diff = round(sum(time_diffs) / len(time_diffs), 2) if time_diffs else 0
             
-            start_date_str = format_date_eat(start_date)
-            end_date_str = format_date_eat(end_date)
+            start_date_str = format_date_eat(start_date) if start_date else 'All Time'
+            end_date_str = format_date_eat(end_date) if date_range != 'all' else 'All Time'
             
             return render_template('reports/sla_report.html',
                                 tasks_analyzed=tasks_analyzed,
@@ -1656,15 +1663,18 @@ def create_app(config_class=DevelopmentConfig):
             task_ids_param = request.args.get('task_ids', '')
             
             end_date = get_eat_time()
-            if date_range == '7days':
+            if date_range == 'all':
+                start_date = None
+            elif date_range == '7days':
                 start_date = end_date - timedelta(days=7)
             elif date_range == '90days':
                 start_date = end_date - timedelta(days=90)
             else:
                 start_date = end_date - timedelta(days=30)
             
-            utc_end = convert_to_utc(end_date.replace(hour=23, minute=59, second=59))
-            utc_start = convert_to_utc(start_date.replace(hour=0, minute=0, second=0))
+            if start_date:
+                start_date = start_date.replace(hour=0, minute=0, second=0)
+                end_date = end_date.replace(hour=23, minute=59, second=59)
             
             if current_user.role == 'Admin':
                 tasks_query = Task.query.options(db.joinedload(Task.assigned_to_user))
@@ -1688,10 +1698,13 @@ def create_app(config_class=DevelopmentConfig):
                     task_ids = task_ids_param.split(',')
                     tasks = tasks_query.filter(Task.id.in_(task_ids)).all()
                 else:
-                    tasks = tasks_query.filter(
-                        Task.created_at >= utc_start,
-                        Task.created_at <= utc_end
-                    ).order_by(Task.created_at.desc()).all()
+                    if start_date and date_range != 'all':
+                        tasks = tasks_query.filter(
+                            Task.created_at >= start_date,
+                            Task.created_at <= end_date
+                        ).order_by(Task.created_at.desc()).all()
+                    else:
+                        tasks = tasks_query.order_by(Task.created_at.desc()).all()
                 
                 if format_type == 'csv':
                     output = StringIO()
@@ -1737,8 +1750,8 @@ def create_app(config_class=DevelopmentConfig):
                     )
                 
                 elif format_type == 'json':
-                    start_date_str = format_date_eat(start_date)
-                    end_date_str = format_date_eat(end_date)
+                    start_date_str = format_date_eat(start_date) if start_date else 'All Time'
+                    end_date_str = format_date_eat(end_date) if date_range != 'all' else 'All Time'
                     
                     tasks_data = []
                     for task in tasks:
@@ -1842,18 +1855,28 @@ def create_app(config_class=DevelopmentConfig):
                     if not current_user.department:
                         flash('You are not assigned to any department.', 'warning')
                         return redirect(url_for('reports_dashboard'))
-                    sla_tasks = Task.query.filter(
-                        Task.sla_due_date.isnot(None),
-                        Task.created_at >= utc_start,
-                        Task.created_at <= utc_end,
-                        Task.department == current_user.department  # Supervisor only sees their department
-                    ).all()
+                    
+                    if start_date and date_range != 'all':
+                        sla_tasks = Task.query.filter(
+                            Task.sla_due_date.isnot(None),
+                            Task.created_at >= start_date,
+                            Task.created_at <= end_date,
+                            Task.department == current_user.department
+                        ).all()
+                    else:
+                        sla_tasks = Task.query.filter(
+                            Task.sla_due_date.isnot(None),
+                            Task.department == current_user.department
+                        ).all()
                 else:
-                    sla_tasks = Task.query.filter(
-                        Task.sla_due_date.isnot(None),
-                        Task.created_at >= utc_start,
-                        Task.created_at <= utc_end
-                    ).all()
+                    if start_date and date_range != 'all':
+                        sla_tasks = Task.query.filter(
+                            Task.sla_due_date.isnot(None),
+                            Task.created_at >= start_date,
+                            Task.created_at <= end_date
+                        ).all()
+                    else:
+                        sla_tasks = Task.query.filter(Task.sla_due_date.isnot(None)).all()
                     
                     if department and department != 'all':
                         sla_tasks = [t for t in sla_tasks if t.department == department]
@@ -1868,15 +1891,11 @@ def create_app(config_class=DevelopmentConfig):
                     
                     for task in sla_tasks:
                         assigned_user = task.assigned_to_user if hasattr(task, 'assigned_to_user') else None
-                        # FIXED: Use compare_datetimes_tz_safe for safe comparison
-                        sla_met = compare_datetimes_tz_safe(task.completed_at, task.sla_due_date)
+                        # Direct comparison - both are EAT naive
+                        sla_met = task.completed_at <= task.sla_due_date if task.completed_at and task.sla_due_date else False
                         hours_diff = 0
                         if task.completed_at and task.sla_due_date:
-                            # Convert both to EAT for calculation
-                            completed_eat = convert_to_eat(task.completed_at)
-                            sla_due_eat = convert_to_eat(task.sla_due_date)
-                            
-                            hours_diff = (completed_eat - sla_due_eat).total_seconds() / 3600
+                            hours_diff = (task.completed_at - task.sla_due_date).total_seconds() / 3600
                         
                         writer.writerow([
                             task.task_id or f"#{task.id[:8]}",
@@ -1901,21 +1920,17 @@ def create_app(config_class=DevelopmentConfig):
                     )
                 
                 elif format_type == 'json':
-                    start_date_str = format_date_eat(start_date)
-                    end_date_str = format_date_eat(end_date)
+                    start_date_str = format_date_eat(start_date) if start_date else 'All Time'
+                    end_date_str = format_date_eat(end_date) if date_range != 'all' else 'All Time'
                     
                     sla_data = []
                     for task in sla_tasks:
                         assigned_user = task.assigned_to_user if hasattr(task, 'assigned_to_user') else None
-                        # FIXED: Use compare_datetimes_tz_safe for safe comparison
-                        sla_met = compare_datetimes_tz_safe(task.completed_at, task.sla_due_date)
+                        # Direct comparison - both are EAT naive
+                        sla_met = task.completed_at <= task.sla_due_date if task.completed_at and task.sla_due_date else False
                         hours_diff = 0
                         if task.completed_at and task.sla_due_date:
-                            # Convert both to EAT for calculation
-                            completed_eat = convert_to_eat(task.completed_at)
-                            sla_due_eat = convert_to_eat(task.sla_due_date)
-                            
-                            hours_diff = (completed_eat - sla_due_eat).total_seconds() / 3600
+                            hours_diff = (task.completed_at - task.sla_due_date).total_seconds() / 3600
                         
                         sla_data.append({
                             'task_id': task.task_id,
@@ -1976,25 +1991,25 @@ def create_app(config_class=DevelopmentConfig):
             # Get tasks from Reports Dashboard perspective (last 30 days)
             end_date = get_eat_time()
             start_date = end_date - timedelta(days=30)
-            utc_end = convert_to_utc(end_date.replace(hour=23, minute=59, second=59))
-            utc_start = convert_to_utc(start_date.replace(hour=0, minute=0, second=0))
+            end_date = end_date.replace(hour=23, minute=59, second=59)
+            start_date = start_date.replace(hour=0, minute=0, second=0)
             
             if current_user.role == 'Admin':
                 reports_dashboard_tasks = Task.query.filter(
-                    Task.created_at >= utc_start,
-                    Task.created_at <= utc_end
+                    Task.created_at >= start_date,
+                    Task.created_at <= end_date
                 ).all()
             elif current_user.role == 'Supervisor':
                 reports_dashboard_tasks = Task.query.filter(
                     Task.department == current_user.department,
-                    Task.created_at >= utc_start,
-                    Task.created_at <= utc_end
+                    Task.created_at >= start_date,
+                    Task.created_at <= end_date
                 ).all()
             else:
                 reports_dashboard_tasks = Task.query.filter(
                     Task.assigned_to == user_id_str,
-                    Task.created_at >= utc_start,
-                    Task.created_at <= utc_end
+                    Task.created_at >= start_date,
+                    Task.created_at <= end_date
                 ).all()
             
             # Find discrepancies
@@ -2013,10 +2028,10 @@ def create_app(config_class=DevelopmentConfig):
                         'id': task.id,
                         'title': task.title,
                         'created_at': format_datetime_eat(task.created_at),
-                        'created_at_utc': task.created_at,
+                        'created_at_raw': task.created_at.isoformat(),
                         'status': task.status,
                         'department': task.department,
-                        'should_be_in_reports': utc_start <= task.created_at <= utc_end
+                        'should_be_in_reports': start_date <= task.created_at <= end_date
                     })
             
             return jsonify({
@@ -2029,10 +2044,10 @@ def create_app(config_class=DevelopmentConfig):
                 'date_ranges': {
                     'reports_start_eat': format_datetime_eat(start_date),
                     'reports_end_eat': format_datetime_eat(end_date),
-                    'reports_start_utc': utc_start.isoformat(),
-                    'reports_end_utc': utc_end.isoformat(),
+                    'reports_start_raw': start_date.isoformat(),
+                    'reports_end_raw': end_date.isoformat(),
                     'current_time_eat': format_datetime_eat(get_eat_time()),
-                    'current_time_utc': datetime.utcnow().isoformat()
+                    'current_time_raw': get_eat_time().isoformat()
                 },
                 'task_counts': {
                     'user_dashboard': len(user_dashboard_tasks),
@@ -2046,9 +2061,9 @@ def create_app(config_class=DevelopmentConfig):
                         'id': t.id,
                         'title': t.title[:50],
                         'created_at': format_datetime_eat(t.created_at),
-                        'created_at_utc': t.created_at.isoformat() if t.created_at else None,
+                        'created_at_raw': t.created_at.isoformat(),
                         'status': t.status,
-                        'in_date_range': utc_start <= t.created_at <= utc_end if t.created_at else False
+                        'in_date_range': start_date <= t.created_at <= end_date
                     }
                     for t in user_dashboard_tasks[:10]
                 ]
@@ -2058,13 +2073,13 @@ def create_app(config_class=DevelopmentConfig):
             return jsonify({'error': str(e), 'traceback': traceback.format_exc()})
     
     # ====================================================================
-    # TASK CREATION WITH ACCURACY FIXES - COMPLETELY FIXED VERSION
+    # TASK CREATION WITH EAT STORAGE - SIMPLIFIED
     # ====================================================================
     
     @app.route('/tasks/create/standalone', methods=['GET', 'POST'])
     @login_required
     def create_task_standalone():
-        """Create a new task with data accuracy fixes"""
+        """Create a new task with EAT storage"""
         try:
             print(f"\n{'='*60}")
             print("DEBUG TASK CREATE: create_task_standalone() called")
@@ -2081,7 +2096,7 @@ def create_app(config_class=DevelopmentConfig):
             department_list = []
             category_list = []
             
-            # Get task stats for sidebar - Moved to the beginning
+            # Get task stats for sidebar
             user_id_str = str(current_user.id)
             current_eat_time = get_eat_time()
             
@@ -2090,7 +2105,7 @@ def create_app(config_class=DevelopmentConfig):
                 total_tasks = Task.query.count()
                 my_tasks = Task.query.filter(Task.assigned_to == user_id_str).count()
                 open_tasks = Task.query.filter(Task.status.in_(['New', 'Assigned', 'In Progress'])).count()
-                completed_tasks = Task.query.filter_by(status='Resolved').count()  # ADDED: completed_tasks
+                completed_tasks = Task.query.filter_by(status='Resolved').count()
                 overdue_tasks = Task.query.filter(
                     get_overdue_filter(Task.due_date, current_eat_time),
                     Task.status.in_(['New', 'Assigned', 'In Progress'])
@@ -2109,7 +2124,7 @@ def create_app(config_class=DevelopmentConfig):
                 completed_tasks = Task.query.filter_by(
                     department=current_user.department,
                     status='Resolved'
-                ).count()  # ADDED: completed_tasks
+                ).count()
                 overdue_tasks = Task.query.filter(
                     get_overdue_filter(Task.due_date, current_eat_time),
                     Task.status.in_(['New', 'Assigned', 'In Progress']),
@@ -2126,7 +2141,7 @@ def create_app(config_class=DevelopmentConfig):
                 completed_tasks = Task.query.filter(
                     Task.assigned_to == user_id_str,
                     Task.status == 'Resolved'
-                ).count()  # ADDED: completed_tasks
+                ).count()
                 overdue_tasks = Task.query.filter(
                     get_overdue_filter(Task.due_date, current_eat_time),
                     Task.status.in_(['New', 'Assigned', 'In Progress']),
@@ -2154,7 +2169,7 @@ def create_app(config_class=DevelopmentConfig):
                         Task.status == status_option
                     ).count()
             
-            # Priority distribution for sidebar - ADDED THIS SECTION
+            # Priority distribution for sidebar
             priority_counts = {}
             priority_options = ['Low', 'Medium', 'High', 'Critical']
             
@@ -2291,7 +2306,7 @@ def create_app(config_class=DevelopmentConfig):
                                          completed_tasks=completed_tasks,
                                          overdue_tasks=overdue_tasks,
                                          status_counts=status_counts,
-                                         priority_counts=priority_counts)  # ADDED: priority_counts
+                                         priority_counts=priority_counts)
                 
                 # If validation passes, create the task
                 print("DEBUG TASK CREATE: All validation passed. Creating task...")
@@ -2300,10 +2315,10 @@ def create_app(config_class=DevelopmentConfig):
                     # FIXED: Ensure all UUIDs are strings
                     current_user_id_str = str(current_user.id)
                     
-                    # Get current time for task creation
+                    # Get current time for task creation - EAT naive datetime
                     current_eat_time = get_eat_time()
                     
-                    # Create task object
+                    # Create task object - store dates as EAT naive datetimes
                     task = Task(
                         title=title,
                         description=description,
@@ -2311,8 +2326,8 @@ def create_app(config_class=DevelopmentConfig):
                         priority=priority,
                         department=department,
                         created_by=current_user_id_str,
-                        created_at=current_eat_time,
-                        updated_at=current_eat_time,
+                        created_at=current_eat_time,  # STORED AS EAT NAIVE
+                        updated_at=current_eat_time,  # STORED AS EAT NAIVE
                         status='New'
                     )
                     
@@ -2320,8 +2335,8 @@ def create_app(config_class=DevelopmentConfig):
                     if due_date_str:
                         try:
                             due_naive = datetime.strptime(due_date_str, '%Y-%m-%d')
-                            due_date = EAT.localize(due_naive.replace(hour=23, minute=59, second=59))
-                            task.due_date = due_date
+                            due_date = due_naive.replace(hour=23, minute=59, second=59)  # EAT naive
+                            task.due_date = due_date  # STORED AS EAT NAIVE
                         except ValueError:
                             print(f"DEBUG TASK CREATE: Invalid due date format: {due_date_str}")
                     
@@ -2334,9 +2349,9 @@ def create_app(config_class=DevelopmentConfig):
                     if location:
                         task.location = location
                     
-                    # Calculate SLA due date
+                    # Calculate SLA due date - returns EAT naive datetime
                     sla_due_date = calculate_sla_due_date(priority, task.created_at)
-                    task.sla_due_date = sla_due_date
+                    task.sla_due_date = sla_due_date  # STORED AS EAT NAIVE
                     
                     # Handle assignment
                     if assigned_to and assigned_to != 'unassigned':
@@ -2375,12 +2390,12 @@ def create_app(config_class=DevelopmentConfig):
                                                          completed_tasks=completed_tasks,
                                                          overdue_tasks=overdue_tasks,
                                                          status_counts=status_counts,
-                                                         priority_counts=priority_counts)  # ADDED: priority_counts
+                                                         priority_counts=priority_counts)
                                 
                                 task.assigned_to = user.id
                                 task.status = 'Assigned'
                                 task.assigned_by = current_user_id_str
-                                task.assigned_at = current_eat_time
+                                task.assigned_at = current_eat_time  # STORED AS EAT NAIVE
                         except Exception as e:
                             print(f"DEBUG TASK CREATE: Error assigning user: {e}")
                             flash(f'Error assigning user: {str(e)}', 'warning')
@@ -2393,9 +2408,8 @@ def create_app(config_class=DevelopmentConfig):
                     print(f"DEBUG TASK CREATE: Task created successfully!")
                     print(f"  Task ID: {task.id}")
                     print(f"  Created at (EAT): {format_datetime_eat(task.created_at)}")
-                    print(f"  Created at (UTC): {task.created_at}")
+                    print(f"  Created at (Raw): {task.created_at}")
                     print(f"  Current EAT time: {format_datetime_eat(current_eat_time)}")
-                    print(f"  Current UTC time: {datetime.utcnow()}")
                     print(f"  Will appear in reports: Yes (created today)")
                     
                     flash(f'Task "{title}" created successfully! SLA due: {format_datetime_eat(sla_due_date)}', 'success')
@@ -2439,7 +2453,7 @@ def create_app(config_class=DevelopmentConfig):
                                          completed_tasks=completed_tasks,
                                          overdue_tasks=overdue_tasks,
                                          status_counts=status_counts,
-                                         priority_counts=priority_counts)  # ADDED: priority_counts
+                                         priority_counts=priority_counts)
             
             # GET request - show empty form
             print("DEBUG TASK CREATE: GET request - showing empty form")
@@ -2461,7 +2475,7 @@ def create_app(config_class=DevelopmentConfig):
                                  completed_tasks=completed_tasks,
                                  overdue_tasks=overdue_tasks,
                                  status_counts=status_counts,
-                                 priority_counts=priority_counts)  # ADDED: priority_counts
+                                 priority_counts=priority_counts)
         
         except Exception as e:
             print(f"DEBUG TASK CREATE: General error: {str(e)}")
@@ -2470,7 +2484,7 @@ def create_app(config_class=DevelopmentConfig):
             return redirect(url_for('dashboard'))
     
     # ====================================================================
-    # FIXED: ADDED MISSING /tasks/create ROUTE - CRITICAL FIX
+    # FIXED: ADDED MISSING /tasks/create ROUTE
     # ====================================================================
     
     @app.route('/tasks/create', methods=['GET', 'POST'])
@@ -2484,7 +2498,6 @@ def create_app(config_class=DevelopmentConfig):
             print('='*60)
             
             # Instead of redirecting, call the create_task_standalone function directly
-            # This ensures the form is shown immediately
             return create_task_standalone()
             
         except Exception as e:
@@ -2504,7 +2517,7 @@ def create_app(config_class=DevelopmentConfig):
         return redirect(url_for('create_task'))
     
     # ====================================================================
-    # WORKFLOW ROUTES - WITH EAT
+    # WORKFLOW ROUTES - WITH EAT STORAGE
     # ====================================================================
     
     @app.route('/workflow-templates')
@@ -2583,8 +2596,8 @@ def create_app(config_class=DevelopmentConfig):
                     category=category,
                     is_active=is_active,
                     created_by=str(current_user.id),
-                    created_at=get_eat_time(),
-                    updated_at=get_eat_time()
+                    created_at=get_eat_time(),  # STORED AS EAT NAIVE
+                    updated_at=get_eat_time()   # STORED AS EAT NAIVE
                 )
                 
                 db.session.add(template)
@@ -2604,8 +2617,8 @@ def create_app(config_class=DevelopmentConfig):
                             assignment_rule=step_assignments[i] if i < len(step_assignments) else 'auto',
                             due_days=int(step_due_days[i]) if i < len(step_due_days) and step_due_days[i].isdigit() else 1,
                             step_order=i + 1,
-                            created_at=get_eat_time(),
-                            updated_at=get_eat_time()
+                            created_at=get_eat_time(),  # STORED AS EAT NAIVE
+                            updated_at=get_eat_time()   # STORED AS EAT NAIVE
                         )
                         db.session.add(step)
                 
@@ -2655,7 +2668,7 @@ def create_app(config_class=DevelopmentConfig):
                 template.description = description
                 template.category = category
                 template.is_active = is_active
-                template.updated_at = get_eat_time()
+                template.updated_at = get_eat_time()  # STORED AS EAT NAIVE
                 
                 WorkflowStep.query.filter_by(workflow_template_id=template.id).delete()
                 
@@ -2673,8 +2686,8 @@ def create_app(config_class=DevelopmentConfig):
                             assignment_rule=step_assignments[i] if i < len(step_assignments) else 'auto',
                             due_days=int(step_due_days[i]) if i < len(step_due_days) and step_due_days[i].isdigit() else 1,
                             step_order=i + 1,
-                            created_at=get_eat_time(),
-                            updated_at=get_eat_time()
+                            created_at=get_eat_time(),  # STORED AS EAT NAIVE
+                            updated_at=get_eat_time()   # STORED AS EAT NAIVE
                         )
                         db.session.add(step)
                 
@@ -2734,8 +2747,8 @@ def create_app(config_class=DevelopmentConfig):
                 category=original.category,
                 is_active=original.is_active,
                 created_by=str(current_user.id),
-                created_at=get_eat_time(),
-                updated_at=get_eat_time()
+                created_at=get_eat_time(),  # STORED AS EAT NAIVE
+                updated_at=get_eat_time()   # STORED AS EAT NAIVE
             )
             
             db.session.add(clone)
@@ -2750,8 +2763,8 @@ def create_app(config_class=DevelopmentConfig):
                     assignment_rule=step.assignment_rule,
                     due_days=step.due_days,
                     step_order=step.step_order,
-                    created_at=get_eat_time(),
-                    updated_at=get_eat_time()
+                    created_at=get_eat_time(),  # STORED AS EAT NAIVE
+                    updated_at=get_eat_time()   # STORED AS EAT NAIVE
                 )
                 db.session.add(cloned_step)
             
@@ -2881,7 +2894,7 @@ def create_app(config_class=DevelopmentConfig):
             return redirect(url_for('system_settings'))
     
     # ====================================================================
-    # ADMIN BULK OPERATIONS - UPDATED WITH FIXED UUID HANDLING
+    # ADMIN BULK OPERATIONS
     # ====================================================================
     
     @app.route('/tasks/admin/bulk')
@@ -2910,11 +2923,11 @@ def create_app(config_class=DevelopmentConfig):
             
             today_eat = get_eat_time().date()
             if date_range == 'today':
-                start_of_day = EAT.localize(datetime.combine(today_eat, datetime.min.time()))
-                end_of_day = EAT.localize(datetime.combine(today_eat, datetime.max.time()))
+                start_of_day = datetime.combine(today_eat, datetime.min.time())
+                end_of_day = datetime.combine(today_eat, datetime.max.time())
                 query = query.filter(
-                    Task.created_at >= convert_to_utc(start_of_day),
-                    Task.created_at <= convert_to_utc(end_of_day)
+                    Task.created_at >= start_of_day,
+                    Task.created_at <= end_of_day
                 )
             elif date_range == 'overdue':
                 # Use get_overdue_filter for query
@@ -2925,9 +2938,8 @@ def create_app(config_class=DevelopmentConfig):
             
             tasks = query.order_by(Task.created_at.desc()).limit(100).all()
             
-            for task in tasks:
-                # For template display, use compare_datetimes_tz_safe
-                task.is_overdue = compare_datetimes_tz_safe(task.due_date, get_eat_time()) and task.status in ['New', 'Assigned', 'In Progress']
+            # REMOVED: The problematic is_overdue assignment that was causing the error
+            # The is_overdue property is now handled by the Task model directly
             
             return render_template('tasks/admin_bulk.html', 
                                  tasks=tasks,
@@ -2984,7 +2996,7 @@ def create_app(config_class=DevelopmentConfig):
                     if assigned_to and task.status == 'New':
                         task.status = 'Assigned'
                     
-                    task.updated_at = get_eat_time()
+                    task.updated_at = get_eat_time()  # STORED AS EAT NAIVE
                     updated_count += 1
                     
                 except (ValueError, Exception):
@@ -3077,12 +3089,12 @@ def create_app(config_class=DevelopmentConfig):
                     task.status = status
                     
                     if status == 'In Progress' and old_status != 'In Progress':
-                        task.started_at = get_eat_time()
+                        task.started_at = get_eat_time()  # STORED AS EAT NAIVE
                     elif status == 'Resolved':
-                        task.completed_at = get_eat_time()
+                        task.completed_at = get_eat_time()  # STORED AS EAT NAIVE
                         task.progress = 100
                     
-                    task.updated_at = get_eat_time()
+                    task.updated_at = get_eat_time()  # STORED AS EAT NAIVE
                     updated_count += 1
                     
                 except (ValueError, Exception):
@@ -3130,7 +3142,7 @@ def create_app(config_class=DevelopmentConfig):
                         continue
                     
                     task.priority = priority
-                    task.updated_at = get_eat_time()
+                    task.updated_at = get_eat_time()  # STORED AS EAT NAIVE
                     updated_count += 1
                     
                 except (ValueError, Exception):
@@ -3177,7 +3189,7 @@ def create_app(config_class=DevelopmentConfig):
                         continue
                     
                     task.department = department.strip()
-                    task.updated_at = get_eat_time()
+                    task.updated_at = get_eat_time()  # STORED AS EAT NAIVE
                     updated_count += 1
                     
                 except (ValueError, Exception):
@@ -3224,7 +3236,7 @@ def create_app(config_class=DevelopmentConfig):
                         continue
                     
                     task.category = category.strip()
-                    task.updated_at = get_eat_time()
+                    task.updated_at = get_eat_time()  # STORED AS EAT NAIVE
                     updated_count += 1
                     
                 except (ValueError, Exception):
@@ -3247,7 +3259,7 @@ def create_app(config_class=DevelopmentConfig):
         return redirect(url_for('admin_bulk_operations'))
     
     # ====================================================================
-    # ADDED: ADMIN BULK IMPORT ROUTE - FIX FOR MISSING ENDPOINT
+    # ADDED: ADMIN BULK IMPORT ROUTE
     # ====================================================================
     
     @app.route('/tasks/admin/bulk/import', methods=['POST'])
@@ -3291,7 +3303,7 @@ def create_app(config_class=DevelopmentConfig):
             tasks_created = 0
             errors = []
             
-            for row_num, row in enumerate(csv_reader, start=2):  # start=2 for header row
+            for row_num, row in enumerate(csv_reader, start=2):
                 try:
                     # Validate required fields
                     title = row['title'].strip()
@@ -3307,15 +3319,15 @@ def create_app(config_class=DevelopmentConfig):
                         errors.append(f"Row {row_num}: Invalid priority. Must be Low, Medium, High, or Critical")
                         continue
                     
-                    # Create task
+                    # Create task - STORE DATES AS EAT NAIVE
                     task = Task(
                         title=title,
                         description=description,
                         priority=priority,
                         department=department,
                         created_by=str(current_user.id),
-                        created_at=get_eat_time(),
-                        updated_at=get_eat_time(),
+                        created_at=get_eat_time(),  # STORED AS EAT NAIVE
+                        updated_at=get_eat_time(),  # STORED AS EAT NAIVE
                         status='New'
                     )
                     
@@ -3326,8 +3338,8 @@ def create_app(config_class=DevelopmentConfig):
                     if 'due_date' in row and row['due_date']:
                         try:
                             due_date = datetime.strptime(row['due_date'], '%Y-%m-%d')
-                            due_date = EAT.localize(due_date.replace(hour=23, minute=59, second=59))
-                            task.due_date = due_date
+                            due_date = due_date.replace(hour=23, minute=59, second=59)  # EAT naive
+                            task.due_date = due_date  # STORED AS EAT NAIVE
                         except ValueError:
                             errors.append(f"Row {row_num}: Invalid due date format. Use YYYY-MM-DD")
                             continue
@@ -3341,10 +3353,10 @@ def create_app(config_class=DevelopmentConfig):
                     if 'location' in row and row['location']:
                         task.location = row['location'].strip()
                     
-                    # Calculate SLA due date
+                    # Calculate SLA due date - returns EAT naive datetime
                     from config import calculate_sla_due_date
                     sla_due_date = calculate_sla_due_date(priority, task.created_at)
-                    task.sla_due_date = sla_due_date
+                    task.sla_due_date = sla_due_date  # STORED AS EAT NAIVE
                     
                     # Handle assignment
                     if 'assigned_to' in row and row['assigned_to']:
@@ -3354,7 +3366,7 @@ def create_app(config_class=DevelopmentConfig):
                             task.assigned_to = user.id
                             task.status = 'Assigned'
                             task.assigned_by = str(current_user.id)
-                            task.assigned_at = get_eat_time()
+                            task.assigned_at = get_eat_time()  # STORED AS EAT NAIVE
                     
                     db.session.add(task)
                     tasks_created += 1
@@ -3383,7 +3395,7 @@ def create_app(config_class=DevelopmentConfig):
             return redirect(url_for('admin_bulk_operations'))
     
     # ====================================================================
-    # ADDED: ADMIN BULK ASSIGN ALIAS ROUTE - FIX FOR WRONG ENDPOINT NAME
+    # ADDED: ADMIN BULK ASSIGN ALIAS ROUTE
     # ====================================================================
     
     @app.route('/tasks/admin/bulk/assign', methods=['POST'], endpoint='admin_bulk_assign')
@@ -3393,7 +3405,7 @@ def create_app(config_class=DevelopmentConfig):
         return admin_bulk_assign_update()
     
     # ====================================================================
-    # DASHBOARD ROUTE - UPDATED WITH ACCURACY FIXES
+    # DASHBOARD ROUTE - WITH EAT STORAGE - SIMPLIFIED (FIXED)
     # ====================================================================
     
     @app.route('/dashboard')
@@ -3409,11 +3421,6 @@ def create_app(config_class=DevelopmentConfig):
             
             user_id_str = str(current_user.id)
             current_eat_time = get_eat_time()
-            
-            def is_task_overdue(task):
-                if not task.due_date:
-                    return False
-                return compare_datetimes_tz_safe(task.due_date, current_eat_time) and task.status in ['New', 'Assigned', 'In Progress']
             
             if current_user.role == 'Admin':
                 total_tasks = Task.query.count()
@@ -3471,10 +3478,11 @@ def create_app(config_class=DevelopmentConfig):
                 
                 print(f"DEBUG DASHBOARD: Regular user view - Assigned tasks: {total_tasks}")
             
+            # Add display fields - DO NOT set is_overdue (it's a property)
             for task in recent_tasks:
                 task.created_at_eat = format_datetime_eat(task.created_at)
                 task.due_date_eat = format_date_eat(task.due_date) if task.due_date else ''
-                task.is_overdue = is_task_overdue(task)
+                # task.is_overdue is a property, not settable - removed the assignment
             
             print(f"DEBUG DASHBOARD: Returning data - Total: {total_tasks}, My tasks: {my_tasks}, Open: {open_tasks}, Overdue: {overdue_tasks}")
             
@@ -3500,20 +3508,22 @@ def create_app(config_class=DevelopmentConfig):
     @app.route('/test-task-creation-fixed', methods=['GET', 'POST'])
     @login_required
     def test_task_creation_fixed():
-        """Test task creation with fixed UUID handling"""
+        """Test task creation with EAT storage"""
         from models.task_models import Task
         from models.user_models import User
         
         if request.method == 'POST':
             try:
-                # Create a test task with fixed UUID handling
+                # Create a test task with EAT storage
                 task = Task(
-                    title="Test Task - Fixed UUID",
-                    description="Testing task creation with fixed UUID handling",
+                    title="Test Task - EAT Storage",
+                    description="Testing task creation with EAT storage",
                     category="Test",
                     priority="Medium",
                     department=current_user.department or "IT",
                     created_by=str(current_user.id),
+                    created_at=get_eat_time(),  # STORED AS EAT NAIVE
+                    updated_at=get_eat_time(),  # STORED AS EAT NAIVE
                     status="New"
                 )
                 
@@ -3537,7 +3547,9 @@ def create_app(config_class=DevelopmentConfig):
                         'id': task.id,
                         'title': task.title,
                         'assigned_to': task.assigned_to,
-                        'created_by': task.created_by
+                        'created_by': task.created_by,
+                        'created_at_eat': format_datetime_eat(task.created_at),
+                        'created_at_raw': task.created_at.isoformat()
                     } if created_task else None
                 })
                 
@@ -3592,7 +3604,8 @@ def create_app(config_class=DevelopmentConfig):
                         'assigned_to': t.assigned_to,
                         'assigned_to_type': type(t.assigned_to).__name__ if t.assigned_to else None,
                         'status': t.status,
-                        'created_at_eat': format_datetime_eat(t.created_at) if t.created_at else None
+                        'created_at_eat': format_datetime_eat(t.created_at) if t.created_at else None,
+                        'created_at_raw': t.created_at.isoformat() if t.created_at else None
                     }
                     for t in tasks_all[:5]
                 ] if tasks_all else []
@@ -3636,7 +3649,7 @@ def create_app(config_class=DevelopmentConfig):
             'status': 'ok',
             'message': 'Server is running',
             'time_eat': format_datetime_eat(get_eat_time()),
-            'time_utc': datetime.utcnow().isoformat()
+            'time_eat_raw': get_eat_time().isoformat()
         })
     
     @app.route('/debug-routes')
@@ -3739,13 +3752,13 @@ def create_app(config_class=DevelopmentConfig):
         return redirect('/tasks?assigned_to=me')
     
     # ====================================================================
-    # TASK CONTROLLER IMPORT - UPDATED TO USE FIXED CONTROLLER
+    # TASK CONTROLLER IMPORT
     # ====================================================================
     
     print("\nSetting up task routes...")
     
     try:
-        # Import the fixed task controller
+        # Import the task controller
         from controllers.task_controller import task_bp
         app.register_blueprint(task_bp)
         print("✓ Task controller blueprint registered")
@@ -3842,7 +3855,7 @@ def create_app(config_class=DevelopmentConfig):
         print("✓ Fallback task routes created")
     
     # ====================================================================
-    # CONTEXT PROCESSOR - UPDATED WITH FIXED UUID HANDLING
+    # CONTEXT PROCESSOR - SIMPLIFIED FOR EAT STORAGE
     # ====================================================================
     
     @app.context_processor
@@ -3888,7 +3901,9 @@ def create_app(config_class=DevelopmentConfig):
             elif isinstance(due_date, date) and not isinstance(due_date, datetime):
                 due_date = datetime.combine(due_date, datetime.min.time())
             
-            return compare_datetimes_tz_safe(due_date, get_eat_time()) and status in ['New', 'Assigned', 'In Progress']
+            # Direct comparison - both are EAT naive
+            current_time = get_eat_time()
+            return due_date < current_time and status in ['New', 'Assigned', 'In Progress']
         
         # Get CSRF token for templates
         csrf_token_value = session.get('csrf_token')
@@ -3962,16 +3977,22 @@ def create_app(config_class=DevelopmentConfig):
             print(f"Business Hours: {app.config['BUSINESS_HOURS_START']}:00-{app.config['BUSINESS_HOURS_END']}:00 EAT")
             print(f"Current EAT Time: {format_datetime_eat(get_eat_time())}")
             print("=" * 60)
-            print("TIMEZONE FIXES APPLIED:")
-            print("1. ✅ All timestamps now display in EAT")
-            print("2. ✅ Database stores UTC, displays EAT")
-            print("3. ✅ Created timestamps show correct EAT time")
-            print("4. ✅ time_ago filter shows correct EAT differences")
-            print("5. ✅ No more '3 hours ahead' issue")
+            print("TIMEZONE CHANGES - NOW STORING IN EAT DIRECTLY:")
+            print("1. ✅ Database now stores timestamps in EAT (not UTC)")
+            print("2. ✅ No conversion needed between storage and display")
+            print("3. ✅ Created timestamps stored directly as EAT")
+            print("4. ✅ Time ago filter uses direct EAT comparison")
+            print("5. ✅ No more '3 hours ahead' issue in storage")
+            print("=" * 60)
+            print("REMOVED UTC CONVERSIONS:")
+            print("1. ✅ Removed convert_to_utc for database storage")
+            print("2. ✅ Simplified convert_to_eat - assumes stored dates are EAT")
+            print("3. ✅ Direct datetime comparisons in EAT")
+            print("4. ✅ No timezone localization overhead")
             print("=" * 60)
             print("DATA ACCURACY FIXES APPLIED:")
-            print("1. Reports Dashboard date filtering fixed")
-            print("2. UTC/EAT time conversion consistency")
+            print("1. Reports Dashboard date filtering simplified")
+            print("2. Direct EAT datetime comparison")
             print("3. Added debug logging for data accuracy")
             print("4. Added debug route: /debug/task-data-accuracy")
             print("5. Fixed task creation timestamp accuracy")
@@ -3983,12 +4004,17 @@ def create_app(config_class=DevelopmentConfig):
             print("11. ✅ FIXED: Added admin_bulk_import route")
             print("12. ✅ FIXED: Added admin_bulk_assign alias route")
             print("13. ✅ FIXED: Supervisor department restriction for SLA report")
+            print("14. ✅ FIXED: Dashboard is_overdue property assignment error")
+            print("15. ✅ FIXED: Reports Dashboard 'All Time' date range option added")
+            print("16. ✅ FIXED: Admin bulk operations is_overdue assignment removed")
             print("=" * 60)
+            
             print("\n🔧 DEBUGGING TOOLS:")
             print("   1. Visit /debug/task-data-accuracy to check data consistency")
             print("   2. Check console logs for detailed debug information")
             print("   3. Create tasks using /tasks/create/standalone")
             print("   4. Compare User Dashboard with Reports Dashboard")
+            print("   5. Use 'All Time' option in Reports Dashboard to see all tasks")
             print("=" * 60)
             
             # Print all available routes for debugging
@@ -4002,31 +4028,36 @@ def create_app(config_class=DevelopmentConfig):
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("🚀 IT TASK MANAGER - EAT TIMEZONE FIXED VERSION")
+    print("🚀 IT TASK MANAGER - EAT STORAGE VERSION")
     print("=" * 60)
     
     app = create_app()
     
     print("\n" + "=" * 60)
-    print("✅ SYSTEM READY WITH EAT TIMEZONE FIXES!")
+    print("✅ SYSTEM READY WITH EAT STORAGE!")
     print("=" * 60)
     
     print("\n⏰ TIMEZONE INFORMATION:")
-    print("   Database: Stores UTC timestamps")
+    print("   Database: Stores EAT timestamps directly")
     print("   Display:  Shows EAT (Africa/Nairobi)")
     print("   Offset:   UTC+3 (No daylight saving)")
+    print("   No UTC conversion at any layer!")
     
     print("\n📋 VERIFICATION:")
     print("   1. Create a task")
     print("   2. Check the 'Created' time - should be EAT")
     print("   3. All timestamps should match Kenya/Uganda/Tanzania time")
-    print("   4. The time in your screenshot should now show correctly")
+    print("   4. Database stores exactly what you see in the UI")
     
     print("\n🐛 FIXED ISSUES:")
     print("   - ✅ All time displays now use EAT timezone")
-    print("   - ✅ Created timestamps show correct EAT time (not UTC+3)")
-    print("   - ✅ time_ago filter fixed to show correct time ago")
-    print("   - ✅ No more '3hrs ahead' issue in the Created section")
+    print("   - ✅ Database stores EAT timestamps (not UTC)")
+    print("   - ✅ Created timestamps stored as EAT")
+    print("   - ✅ No conversion overhead when displaying timestamps")
+    print("   - ✅ No more timezone mismatch between storage and display")
+    print("   - ✅ Dashboard is_overdue property error fixed")
+    print("   - ✅ Reports Dashboard now has 'All Time' option")
+    print("   - ✅ Admin bulk operations is_overdue assignment removed")
     
     print("\nPress CTRL+C to stop\n")
     
