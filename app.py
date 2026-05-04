@@ -162,6 +162,13 @@ def create_app(config_class=DevelopmentConfig):
     migrate = Migrate(app, db)
     
     # ====================================================================
+    # FIX: CREATE DATABASE TABLES BEFORE QUERYING THEM
+    # ====================================================================
+    with app.app_context():
+        db.create_all()
+        print("✓ Database tables created/verified")
+    
+    # ====================================================================
     # SIMPLE CSRF PROTECTION
     # ====================================================================
     
@@ -4007,6 +4014,7 @@ def create_app(config_class=DevelopmentConfig):
             print("14. ✅ FIXED: Dashboard is_overdue property assignment error")
             print("15. ✅ FIXED: Reports Dashboard 'All Time' date range option added")
             print("16. ✅ FIXED: Admin bulk operations is_overdue assignment removed")
+            print("17. ✅ FIXED: Database tables created before queries")
             print("=" * 60)
             
             print("\n🔧 DEBUGGING TOOLS:")
@@ -4058,6 +4066,7 @@ if __name__ == '__main__':
     print("   - ✅ Dashboard is_overdue property error fixed")
     print("   - ✅ Reports Dashboard now has 'All Time' option")
     print("   - ✅ Admin bulk operations is_overdue assignment removed")
+    print("   - ✅ Database tables created before queries")
     
     print("\nPress CTRL+C to stop\n")
     
