@@ -385,6 +385,39 @@ class TaskComment(BaseModel):
         return f'<TaskComment {self.id} by User {self.user_id}>'
 
 
+class TaskDependency(BaseModel):
+    """Task dependency model for tracking task relationships"""
+    __tablename__ = 'task_dependencies'
+    
+    task_id = db.Column(db.String(36), db.ForeignKey('tasks.id'), nullable=False, index=True)
+    depends_on_task_id = db.Column(db.String(36), db.ForeignKey('tasks.id'), nullable=False, index=True)
+    dependency_type = db.Column(db.String(50), default='finish_to_start')  # finish_to_start, start_to_start, etc.
+    
+    # Relationships
+    task = db.relationship('Task', foreign_keys=[task_id], backref=db.backref('dependencies', lazy='dynamic', cascade='all, delete-orphan'))
+    depends_on_task = db.relationship('Task', foreign_keys=[depends_on_task_id])
+    
+    def __repr__(self):
+        return f'<TaskDependency {self.task_id} depends on {self.depends_on_task_id}>'
+
+
+class TaskWorkflow(BaseModel):
+    """Task workflow tracking model"""
+    __tablename__ = 'task_workflows'
+    
+    task_id = db.Column(db.String(36), db.ForeignKey('tasks.id'), nullable=False, index=True)
+    workflow_template_id = db.Column(db.String(36), db.ForeignKey('workflow_templates.id'), nullable=False)
+    current_step = db.Column(db.Integer, default=1)
+    status = db.Column(db.String(50), default='active')  # active, completed, paused
+    
+    # Relationships
+    task = db.relationship('Task', backref=db.backref('workflow', uselist=False, cascade='all, delete-orphan'))
+    workflow_template = db.relationship('WorkflowTemplate', backref=db.backref('task_workflows', lazy='dynamic'))
+    
+    def __repr__(self):
+        return f'<TaskWorkflow Task:{self.task_id} Template:{self.workflow_template_id}>'
+
+
 class Escalation(BaseModel):
     __tablename__ = 'escalations'
     

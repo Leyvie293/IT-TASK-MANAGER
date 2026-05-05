@@ -52,3 +52,33 @@ class BaseModel(db.Model):
     
     def __repr__(self):
         return f"<{self.__class__.__name__} {self.id}>"
+
+
+# Import all models after db is defined to avoid circular imports
+from .task_models import (
+    Task, 
+    TaskComment, 
+    Attachment as TaskAttachment,  # Alias Attachment to TaskAttachment for compatibility
+    TaskHistory, 
+    TaskActivity,
+    TaskDependency,
+    TaskWorkflow,
+    Escalation,
+    WorkflowTemplate, 
+    WorkflowStep,
+    TaskTemplate,
+    KnowledgeBase
+)
+
+from .user_models import (
+    User,              # Main user model
+    UserPreference,    # User preferences
+    Department,        # Department model
+    Notification,      # Notifications
+    ActivityLog,       # Activity logs
+    AuditLog,          # Audit logs
+    UserSession,       # User sessions
+    Skill,             # Skills
+    UserSkill,         # User-Skill association
+    PasswordResetToken # Password reset tokens
+)
